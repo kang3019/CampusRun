@@ -40,8 +40,8 @@ namespace CampusRun.Obstacles
         {
             if (!_isActive) return;
 
-            // X축 방향으로 등속 직선 이동
-            transform.Translate(Vector3.forward * (_speed * Time.deltaTime), Space.Self);
+            // X축 방향으로 등속 직선 이동 (월드 좌표 기준)
+            transform.position += new Vector3(_direction * _speed * Time.deltaTime, 0f, 0f);
 
             // 경계선 도달 시 비활성화 및 콜백 호출
             if ((_direction > 0 && transform.position.x > _despawnBoundaryX) ||
