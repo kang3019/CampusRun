@@ -121,27 +121,42 @@ namespace CampusRun.Track
             }
         }
 
+        // 리듬감 있는 그룹 스폰 상태 변수
+        private int _currentRoadGroupLeft = 2;   // 남은 도로 수
+        private int _currentSafeGroupLeft = 0;   // 남은 쉼터 수
+
         private void SpawnNextLane(int zIndex)
         {
-            // 연속 도로 제한 체크 (최대 도로 수 초과 시 강제로 안전 레인 스폰)
-            if (_consecutiveRoadCount >= _maxConsecutiveRoads)
+            // 1. 안전 쉼터 구간이어야 할 때
+            if (_currentSafeGroupLeft > 0)
             {
                 SpawnSafeLane(zIndex);
-                _consecutiveRoadCount = 0;
+                _currentSafeGroupLeft--;
+
+                // 쉼터 구간이 끝나면 다음 도로 묶음 (2~3개) 준비
+                if (_currentSafeGroupLeft <= 0)
+                {
+                    _currentRoadGroupLeft = Random.Range(2, 4); // 도로 2~3칸 연속 배치
+                }
                 return;
             }
 
-            // 70% 확률로 도로, 30% 확률로 안전 레인 스폰
-            if (Random.value < 0.7f && _roadLanePool != null)
+            // 2. 도로 구간일 때
+            if (_currentRoadGroupLeft > 0 && _roadLanePool != null)
             {
                 SpawnRoadLane(zIndex);
-                _consecutiveRoadCount++;
+                _currentRoadGroupLeft--;
+
+                // 도로 묶음이 끝나면 다음 안전 쉼터 (1~2칸) 준비
+                if (_currentRoadGroupLeft <= 0)
+                {
+                    _currentSafeGroupLeft = Random.Range(1, 3); // 쉼터 1~2칸 보장
+                }
+                return;
             }
-            else
-            {
-                SpawnSafeLane(zIndex);
-                _consecutiveRoadCount = 0;
-            }
+
+            // 기본 안전 처리
+            SpawnSafeLane(zIndex);
         }
 
         private void SpawnSafeLane(int zIndex)
@@ -202,6 +217,8 @@ namespace CampusRun.Track
 
             _currentMaxSpawnedZ = -3;
             _consecutiveRoadCount = 0;
+            _currentRoadGroupLeft = 2;
+            _currentSafeGroupLeft = 0;
 
             SpawnInitialLanes();
         }

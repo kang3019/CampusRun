@@ -320,6 +320,8 @@ namespace CampusRun.Player
             _isAlive = false;
             _isControlEnabled = false;
 
+            Debug.LogWarning($"[CampusRun] 게임오버! {deathReason} (최종 점수: {_maxReachedGridZ * 10}m)");
+
             if (_hopCoroutine != null)
             {
                 StopCoroutine(_hopCoroutine);
