@@ -20,37 +20,46 @@ namespace CampusRun.Player
 
         private void OnTriggerEnter(Collider other)
         {
+            HandleHit(other.gameObject);
+        }
+
+        private void OnCollisionEnter(Collision collision)
+        {
+            HandleHit(collision.gameObject);
+        }
+
+        private void HandleHit(GameObject hitObject)
+        {
             if (!_playerController.IsAlive) return;
 
             // 장애물 태그 검사 (CompareTag로 GC 할당 차단)
-            if (other.CompareTag("Obstacle"))
+            if (hitObject.CompareTag("Obstacle"))
             {
-                // 충돌체에 붙은 별도 사유가 있다면 우선 반영
                 string reason = _defaultDeathReason;
-                
-                // 장애물 이름 기반 맞춤형 사유 판정
-                string objectName = other.gameObject.name;
+                string objectName = hitObject.name;
+
                 if (objectName.Contains("Bus") || objectName.Contains("Shuttle"))
                 {
-                    reason = "1교시 셔틀버스를 피하지 못했습니다!";
+                    reason = "💥 1교시 셔틀버스를 피하지 못했습니다!";
                 }
                 else if (objectName.Contains("Laser") || objectName.Contains("Professor"))
                 {
-                    reason = "교수님의 기습 출석체크 레이저에 걸렸습니다!";
+                    reason = "⚡ 교수님의 기습 출석체크 레이저에 걸렸습니다!";
                 }
                 else if (objectName.Contains("Bomb") || objectName.Contains("Assignment"))
                 {
-                    reason = "하늘에서 떨어진 과제 폭탄에 맞았습니다!";
+                    reason = "💣 하늘에서 떨어진 과제 폭탄에 맞았습니다!";
                 }
                 else if (objectName.Contains("Freerider"))
                 {
-                    reason = "조별과제 프리라이더에게 붙잡혔습니다!";
+                    reason = "👥 조별과제 프리라이더에게 붙잡혔습니다!";
                 }
                 else if (objectName.Contains("Missile") || objectName.Contains("GradeF"))
                 {
-                    reason = "유도 F학점 미사일에 직격당했습니다!";
+                    reason = "🚀 유도 F학점 미사일에 직격당했습니다!";
                 }
 
+                Debug.LogWarning($"[CampusRun] 충돌 발생! {reason}");
                 _playerController.Die(reason);
             }
         }

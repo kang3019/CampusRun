@@ -38,9 +38,12 @@ namespace CampusRun.Player
         [SerializeField] private Vector3 _jumpStretchScale = new Vector3(0.8f, 1.25f, 0.8f);
         [SerializeField] private Vector3 _landSquashScale = new Vector3(1.25f, 0.75f, 1.25f);
 
-        [Header("--- 타임아웃 (지체 감지) ---")]
+        [Header("--- 타임아웃 (지체 감지 / 독수리 기믹) ---")]
+        [Tooltip("한 자리에 오래 머물 때 시간초과 탈락 활성화 여부 (개발/테스트 중에는 끄는 것을 권장)")]
+        [SerializeField] private bool _enableInactivityTimeout = false;
+
         [Tooltip("한 자리에 오래 머물 경우 시간초과 탈락까지의 제한시간(초)")]
-        [SerializeField] private float _inactivityTimeout = 3.5f;
+        [SerializeField] private float _inactivityTimeout = 10f;
 
         // 내부 그리드 좌표 상태
         private int _currentGridX = 0;
@@ -295,11 +298,14 @@ namespace CampusRun.Player
 
         private void CheckInactivityTimer()
         {
+            if (!_enableInactivityTimeout) return;
+
             _idleTimer += Time.deltaTime;
 
             if (_idleTimer >= _inactivityTimeout)
             {
                 // 시간 초과 탈락 (길건너 친구들의 독수리 낚아채기 대응)
+                Debug.LogWarning("[CampusRun] 시간 초과! 등굣길에서 너무 오래 망설여 탈락했습니다.");
                 Die("시간 초과! 등굣길에서 너무 오래 망설였습니다.");
             }
         }

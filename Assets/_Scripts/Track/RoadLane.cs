@@ -23,9 +23,9 @@ namespace CampusRun.Track
         [SerializeField] private float _minSpeed = 4f;
         [SerializeField] private float _maxSpeed = 8f;
 
-        [Tooltip("차량 스폰 간격(초) 범위")]
-        [SerializeField] private float _minSpawnInterval = 1.5f;
-        [SerializeField] private float _maxSpawnInterval = 3.5f;
+        [Tooltip("차량 스폰 간격(초) 범위 - 값이 클수록 버스가 뜸하게 나옴")]
+        [SerializeField] private float _minSpawnInterval = 2.5f;
+        [SerializeField] private float _maxSpawnInterval = 5.0f;
 
         [Tooltip("스폰 시작 X축 좌표")]
         [SerializeField] private float _spawnBoundaryX = 14f;
@@ -91,6 +91,12 @@ namespace CampusRun.Track
 
             _currentSpeed = Random.Range(_minSpeed, _maxSpeed);
 
+            // 풀이 아직 생성되지 않았다면 안전하게 초기화
+            if (_vehiclePool == null)
+            {
+                InitializePool();
+            }
+
             // 차량 스폰 루틴 시작
             if (_spawnRoutine != null) StopCoroutine(_spawnRoutine);
             _spawnRoutine = StartCoroutine(VehicleSpawnRoutine());
@@ -119,7 +125,8 @@ namespace CampusRun.Track
 
         private IEnumerator VehicleSpawnRoutine()
         {
-            // 첫 진입 시 즉시 1대 스폰 후 주기 루프 진입
+            // 레인 생성 직후 갑자기 치이지 않도록 첫 스폰에 약간의 랜덤 대기
+            yield return new WaitForSeconds(Random.Range(0.5f, 2.0f));
             SpawnVehicle();
 
             while (true)
@@ -137,9 +144,9 @@ namespace CampusRun.Track
 
             MovingVehicle vehicle = _vehiclePool.Get();
 
-            // 스폰 위치 계산 (진행 방향의 반대쪽 끝에서 출발)
+            // 스폰 위치 계산 (진행 방향의 반대쪽 끝에서 출발, Y=0.3f로 도로 바닥에 착 안착)
             float startX = (_currentDirection > 0) ? -_spawnBoundaryX : _spawnBoundaryX;
-            vehicle.transform.position = new Vector3(startX, 0f, LaneZIndex);
+            vehicle.transform.position = new Vector3(startX, 0.3f, LaneZIndex);
 
             // 차량 초기화 (도착 시 풀 반환 콜백 연결)
             vehicle.Initialize(_currentDirection, _currentSpeed, (v) =>
