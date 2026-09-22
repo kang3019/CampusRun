@@ -2,6 +2,7 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using CampusRun.Core;
+using CampusRun.Obstacles;
 
 namespace CampusRun.Player
 {
@@ -59,6 +60,7 @@ namespace CampusRun.Player
         // 캐싱 변수
         private Vector3 _originalModelScale = Vector3.one;
         private Coroutine _hopCoroutine;
+        private readonly Collider[] _obstacleCheckHits = new Collider[4];
 
         // 터치 및 스와이프 입력 감지 변수
         private Vector2 _touchStartPos;
@@ -225,6 +227,14 @@ namespace CampusRun.Player
             Vector3 startPos = transform.position;
             Vector3 targetPos = new Vector3(targetX * _gridSize, 0f, targetZ * _gridSize);
 
+            // 목표 칸에 방치된 킥보드 등 고정 장애물이 있는지 비할당 검사
+            if (IsObstacleAt(targetPos))
+            {
+                if (_hopCoroutine != null) StopCoroutine(_hopCoroutine);
+                _hopCoroutine = StartCoroutine(BlockedHopRoutine(startPos, worldDirection));
+                return false;
+            }
+
             // 상태 갱신
             _currentGridX = targetX;
             _currentGridZ = targetZ;
@@ -245,6 +255,58 @@ namespace CampusRun.Player
             _hopCoroutine = StartCoroutine(HopRoutine(startPos, targetPos));
 
             return true;
+        }
+
+        private bool IsObstacleAt(Vector3 targetPos)
+        {
+            Vector3 checkCenter = targetPos + Vector3.up * 0.3f;
+            int hitCount = Physics.OverlapSphereNonAlloc(checkCenter, 0.35f, _obstacleCheckHits);
+
+            for (int i = 0; i < hitCount; i++)
+            {
+                Collider hit = _obstacleCheckHits[i];
+                if (hit == null) continue;
+
+                if (hit.GetComponent<StationaryObstacle>() != null)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private IEnumerator BlockedHopRoutine(Vector3 startPos, Vector3 direction)
+        {
+            _isHopping = true;
+            float duration = _hopDuration * 0.7f;
+            float elapsed = 0f;
+            Vector3 nudgePos = startPos + direction * 0.2f;
+
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / duration);
+
+                // 부딪히며 제자리로 튕김
+                float forwardT = Mathf.Sin(t * Mathf.PI);
+                transform.position = Vector3.Lerp(startPos, nudgePos, forwardT);
+
+                // 스쿼시 연출
+                if (_visualModelTransform != null)
+                {
+                    _visualModelTransform.localScale = Vector3.Lerp(_originalModelScale, _landSquashScale, forwardT);
+                }
+
+                yield return null;
+            }
+
+            transform.position = startPos;
+            if (_visualModelTransform != null)
+            {
+                _visualModelTransform.localScale = _originalModelScale;
+            }
+            _isHopping = false;
         }
 
         private IEnumerator HopRoutine(Vector3 startPos, Vector3 targetPos)
