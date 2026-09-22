@@ -18,6 +18,9 @@ namespace CampusRun.Track
         [Tooltip("1단계 셔틀버스 도로 레인 프리팹")]
         [SerializeField] private RoadLane _roadLanePrefab;
 
+        [Tooltip("200m 이후 등장하는 배달 오토바이 급습 레인 프리팹")]
+        [SerializeField] private MotorcycleLane _motorcycleLanePrefab;
+
         [Header("--- 맵 생성 밸런스 설정 ---")]
         [Tooltip("게임 시작 시 시작점 주변 안전 레인 수 (Z=-2 ~ Z=3)")]
         [SerializeField] private int _initialSafeLaneCount = 6;
@@ -31,14 +34,22 @@ namespace CampusRun.Track
         [Tooltip("연속으로 생성 가능한 최대 도로 레인 수 (난이도 조절)")]
         [SerializeField] private int _maxConsecutiveRoads = 3;
 
+        [Header("--- 배달 오토바이 기믹 설정 ---")]
+        [Tooltip("오토바이 레인이 등장하기 시작하는 최소 Z 좌표 (기본 20 = 200m)")]
+        [SerializeField] private int _motorcycleMinZ = 20;
+
+        [Tooltip("200m 이후 도로 생성 시 오토바이 레인으로 대체될 확률 (0~1)")]
+        [Range(0f, 1f)]
+        [SerializeField] private float _motorcycleSpawnChance = 0.25f;
+
         // 런타임 추적 변수
         private int _currentMaxSpawnedZ = -3;
-        private int _consecutiveRoadCount = 0;
         private readonly List<BaseLane> _activeLanes = new List<BaseLane>();
 
         // 레인 오브젝트 풀
         private IObjectPool<SafeLane> _safeLanePool;
         private IObjectPool<RoadLane> _roadLanePool;
+        private IObjectPool<MotorcycleLane> _motorcycleLanePool;
 
         private void Awake()
         {
@@ -87,6 +98,18 @@ namespace CampusRun.Track
                     maxSize: 60
                 );
             }
+
+            if (_motorcycleLanePrefab != null)
+            {
+                _motorcycleLanePool = new ObjectPool<MotorcycleLane>(
+                    createFunc: () => Instantiate(_motorcycleLanePrefab, transform),
+                    actionOnGet: (lane) => { },
+                    actionOnRelease: (lane) => lane.Recycle(),
+                    actionOnDestroy: (lane) => { if (lane != null) Destroy(lane.gameObject); },
+                    defaultCapacity: 5,
+                    maxSize: 15
+                );
+            }
         }
 
         private void SpawnInitialLanes()
@@ -133,10 +156,10 @@ namespace CampusRun.Track
                 SpawnSafeLane(zIndex);
                 _currentSafeGroupLeft--;
 
-                // 쉼터 구간이 끝나면 다음 도로 묶음 (2~3개) 준비
+                // 쉼터 구간이 끝나면 다음 도로 묶음 준비
                 if (_currentSafeGroupLeft <= 0)
                 {
-                    _currentRoadGroupLeft = Random.Range(2, 4); // 도로 2~3칸 연속 배치
+                    _currentRoadGroupLeft = Random.Range(2, Mathf.Max(3, _maxConsecutiveRoads + 1));
                 }
                 return;
             }
@@ -170,9 +193,26 @@ namespace CampusRun.Track
 
         private void SpawnRoadLane(int zIndex)
         {
+            // 200m(zIndex >= _motorcycleMinZ) 이후 일정 확률로 오토바이 레인 스폰
+            if (_motorcycleLanePrefab != null && _motorcycleLanePool != null &&
+                zIndex >= _motorcycleMinZ && Random.value < _motorcycleSpawnChance)
+            {
+                SpawnMotorcycleLane(zIndex);
+                return;
+            }
+
             if (_roadLanePool == null) return;
 
             RoadLane lane = _roadLanePool.Get();
+            lane.Initialize(zIndex);
+            _activeLanes.Add(lane);
+        }
+
+        private void SpawnMotorcycleLane(int zIndex)
+        {
+            if (_motorcycleLanePool == null) return;
+
+            MotorcycleLane lane = _motorcycleLanePool.Get();
             lane.Initialize(zIndex);
             _activeLanes.Add(lane);
         }
@@ -194,6 +234,10 @@ namespace CampusRun.Track
                     {
                         _roadLanePool.Release(roadLane);
                     }
+                    else if (lane is MotorcycleLane motorcycleLane && _motorcycleLanePool != null)
+                    {
+                        _motorcycleLanePool.Release(motorcycleLane);
+                    }
                 }
             }
         }
@@ -212,11 +256,14 @@ namespace CampusRun.Track
                 {
                     _roadLanePool.Release(roadLane);
                 }
+                else if (lane is MotorcycleLane motorcycleLane && _motorcycleLanePool != null)
+                {
+                    _motorcycleLanePool.Release(motorcycleLane);
+                }
             }
             _activeLanes.Clear();
 
             _currentMaxSpawnedZ = -3;
-            _consecutiveRoadCount = 0;
             _currentRoadGroupLeft = 2;
             _currentSafeGroupLeft = 0;
 

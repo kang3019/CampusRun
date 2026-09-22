@@ -99,7 +99,7 @@ namespace CampusRun.Player
         {
             if (_target == null)
             {
-                _playerController = Object.FindFirstObjectByType<GridPlayerController>();
+                _playerController = Object.FindAnyObjectByType<GridPlayerController>();
                 if (_playerController != null)
                 {
                     _target = _playerController.transform;
