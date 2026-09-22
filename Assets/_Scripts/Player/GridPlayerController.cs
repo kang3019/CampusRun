@@ -79,7 +79,11 @@ namespace CampusRun.Player
 
             if (_visualModelTransform != null)
             {
+                // 사용자 요청: 스케일을 0.9 값으로 고정
+                _visualModelTransform.localScale = new Vector3(0.9f, 0.9f, 0.9f);
                 _originalModelScale = _visualModelTransform.localScale;
+                _jumpStretchScale = new Vector3(_originalModelScale.x * 0.85f, _originalModelScale.y * 1.25f, _originalModelScale.z * 0.85f);
+                _landSquashScale = new Vector3(_originalModelScale.x * 1.20f, _originalModelScale.y * 0.80f, _originalModelScale.z * 1.20f);
             }
 
             // 시작 좌표를 그리드에 스냅
@@ -230,12 +234,12 @@ namespace CampusRun.Player
             _currentGridZ = targetZ;
             _idleTimer = 0f; // 이동 시 활동 타이머 리셋
 
-            // 최고 기록 전진 여부 확인
+            // 최고 기록 전진 여부 확인 (좌우, 뒤로는 점수 변동 없고 오직 앞으로 최고 기록 갱신 시에만 +1점)
             if (_currentGridZ > _maxReachedGridZ)
             {
                 _maxReachedGridZ = _currentGridZ;
                 GameEvents.TriggerPlayerHopped(_maxReachedGridZ);
-                GameEvents.TriggerScoreChanged(_maxReachedGridZ * 10); // 1칸당 10m/점수
+                GameEvents.TriggerScoreChanged(_maxReachedGridZ); // 앞으로 전진 1칸당 1점
             }
 
             GameEvents.TriggerPlayerGridMoved(new Vector3Int(_currentGridX, 0, _currentGridZ));
@@ -320,15 +324,15 @@ namespace CampusRun.Player
             _isAlive = false;
             _isControlEnabled = false;
 
-            Debug.LogWarning($"[CampusRun] 게임오버! {deathReason} (최종 점수: {_maxReachedGridZ * 10}m)");
+            Debug.LogWarning($"[CampusRun] 게임오버! {deathReason} (최종 점수: {_maxReachedGridZ}점)");
 
             if (_hopCoroutine != null)
             {
                 StopCoroutine(_hopCoroutine);
             }
 
-            // 사망 이벤트 발생
-            GameEvents.TriggerPlayerDied(deathReason, _maxReachedGridZ * 10);
+            // 사망 이벤트 발생 (앞으로 전진한 1칸당 1점과 동일하게 전달)
+            GameEvents.TriggerPlayerDied(deathReason, _maxReachedGridZ);
             GameEvents.TriggerGameStateChanged(GameState.GameOver);
         }
 

@@ -122,8 +122,9 @@ namespace CampusRun.Track
         }
 
         // 리듬감 있는 그룹 스폰 상태 변수
-        private int _currentRoadGroupLeft = 2;   // 남은 도로 수
+        private int _currentRoadGroupLeft = 1;   // 첫 도로는 무조건 1칸 단독 도로
         private int _currentSafeGroupLeft = 0;   // 남은 쉼터 수
+        private float _lastRoadDirection = 1f;   // 직전 도로 방향 (+1: 오른쪽, -1: 왼쪽)
 
         private void SpawnNextLane(int zIndex)
         {
@@ -133,10 +134,24 @@ namespace CampusRun.Track
                 SpawnSafeLane(zIndex);
                 _currentSafeGroupLeft--;
 
-                // 쉼터 구간이 끝나면 다음 도로 묶음 (2~3개) 준비
+                // 쉼터 구간이 끝나면 진행도(zIndex)에 맞춰 다음 도로 묶음 준비
                 if (_currentSafeGroupLeft <= 0)
                 {
-                    _currentRoadGroupLeft = Random.Range(2, 4); // 도로 2~3칸 연속 배치
+                    if (zIndex < 30)
+                    {
+                        // [초반 완벽 적응 구간]: 도로는 무조건 1칸 단독! (지나갈 수 있는 확실한 1차선 도로)
+                        _currentRoadGroupLeft = 1;
+                    }
+                    else if (zIndex < 55)
+                    {
+                        // [중반 구간]: 도로 1~2칸
+                        _currentRoadGroupLeft = Random.Range(1, 3);
+                    }
+                    else
+                    {
+                        // [심화 구간]: 도로 2~3칸
+                        _currentRoadGroupLeft = Random.Range(2, 4);
+                    }
                 }
                 return;
             }
@@ -147,10 +162,11 @@ namespace CampusRun.Track
                 SpawnRoadLane(zIndex);
                 _currentRoadGroupLeft--;
 
-                // 도로 묶음이 끝나면 다음 안전 쉼터 (1~2칸) 준비
+                // 도로 묶음이 끝나면 다음 안전 쉼터 준비
                 if (_currentRoadGroupLeft <= 0)
                 {
-                    _currentSafeGroupLeft = Random.Range(1, 3); // 쉼터 1~2칸 보장
+                    // 초반(Z < 30)에는 안전 쉼터를 2~3칸 보장하여 여유롭게 호흡 조절
+                    _currentSafeGroupLeft = (zIndex < 30) ? Random.Range(2, 4) : Random.Range(1, 3);
                 }
                 return;
             }
@@ -172,7 +188,11 @@ namespace CampusRun.Track
         {
             if (_roadLanePool == null) return;
 
+            // 인접한 도로는 방향을 반대로 교차하여 리듬감과 시각적 안정감 부여
+            _lastRoadDirection = -_lastRoadDirection;
+
             RoadLane lane = _roadLanePool.Get();
+            lane.SetDesiredDirection(_lastRoadDirection);
             lane.Initialize(zIndex);
             _activeLanes.Add(lane);
         }
@@ -217,7 +237,7 @@ namespace CampusRun.Track
 
             _currentMaxSpawnedZ = -3;
             _consecutiveRoadCount = 0;
-            _currentRoadGroupLeft = 2;
+            _currentRoadGroupLeft = 1;
             _currentSafeGroupLeft = 0;
 
             SpawnInitialLanes();
