@@ -18,6 +18,9 @@ namespace CampusRun.Track
         [Tooltip("1단계 셔틀버스 도로 레인 프리팹")]
         [SerializeField] private RoadLane _roadLanePrefab;
 
+        [Tooltip("200m 이후 등장하는 배달 오토바이 급습 레인 프리팹")]
+        [SerializeField] private MotorcycleLane _motorcycleLanePrefab;
+
         [Header("--- 맵 생성 밸런스 설정 ---")]
         [Tooltip("게임 시작 시 시작점 주변 안전 레인 수 (Z=-2 ~ Z=3)")]
         [SerializeField] private int _initialSafeLaneCount = 6;
@@ -31,14 +34,22 @@ namespace CampusRun.Track
         [Tooltip("연속으로 생성 가능한 최대 도로 레인 수 (난이도 조절)")]
         [SerializeField] private int _maxConsecutiveRoads = 3;
 
+        [Header("--- 배달 오토바이 기믹 설정 ---")]
+        [Tooltip("오토바이 레인이 등장하기 시작하는 최소 Z 좌표 (기본 8 = 80m 맛보기 출현)")]
+        [SerializeField] private int _motorcycleMinZ = 8;
+
+        [Tooltip("최소 Z 좌표 이후 도로 생성 시 오토바이 레인으로 대체될 확률 (0~1)")]
+        [Range(0f, 1f)]
+        [SerializeField] private float _motorcycleSpawnChance = 0.35f;
+
         // 런타임 추적 변수
         private int _currentMaxSpawnedZ = -3;
-        private int _consecutiveRoadCount = 0;
         private readonly List<BaseLane> _activeLanes = new List<BaseLane>();
 
         // 레인 오브젝트 풀
         private IObjectPool<SafeLane> _safeLanePool;
         private IObjectPool<RoadLane> _roadLanePool;
+        private IObjectPool<MotorcycleLane> _motorcycleLanePool;
 
         private void Awake()
         {
@@ -85,6 +96,18 @@ namespace CampusRun.Track
                     actionOnDestroy: (lane) => { if (lane != null) Destroy(lane.gameObject); },
                     defaultCapacity: 20,
                     maxSize: 60
+                );
+            }
+
+            if (_motorcycleLanePrefab != null)
+            {
+                _motorcycleLanePool = new ObjectPool<MotorcycleLane>(
+                    createFunc: () => Instantiate(_motorcycleLanePrefab, transform),
+                    actionOnGet: (lane) => { },
+                    actionOnRelease: (lane) => lane.Recycle(),
+                    actionOnDestroy: (lane) => { if (lane != null) Destroy(lane.gameObject); },
+                    defaultCapacity: 5,
+                    maxSize: 15
                 );
             }
         }
@@ -186,6 +209,14 @@ namespace CampusRun.Track
 
         private void SpawnRoadLane(int zIndex)
         {
+            // 200m(zIndex >= _motorcycleMinZ) 이후 일정 확률로 오토바이 레인 스폰
+            if (_motorcycleLanePrefab != null && _motorcycleLanePool != null &&
+                zIndex >= _motorcycleMinZ && Random.value < _motorcycleSpawnChance)
+            {
+                SpawnMotorcycleLane(zIndex);
+                return;
+            }
+
             if (_roadLanePool == null) return;
 
             // 인접한 도로는 방향을 반대로 교차하여 리듬감과 시각적 안정감 부여
@@ -193,6 +224,15 @@ namespace CampusRun.Track
 
             RoadLane lane = _roadLanePool.Get();
             lane.SetDesiredDirection(_lastRoadDirection);
+            lane.Initialize(zIndex);
+            _activeLanes.Add(lane);
+        }
+
+        private void SpawnMotorcycleLane(int zIndex)
+        {
+            if (_motorcycleLanePool == null) return;
+
+            MotorcycleLane lane = _motorcycleLanePool.Get();
             lane.Initialize(zIndex);
             _activeLanes.Add(lane);
         }
@@ -214,6 +254,10 @@ namespace CampusRun.Track
                     {
                         _roadLanePool.Release(roadLane);
                     }
+                    else if (lane is MotorcycleLane motorcycleLane && _motorcycleLanePool != null)
+                    {
+                        _motorcycleLanePool.Release(motorcycleLane);
+                    }
                 }
             }
         }
@@ -232,12 +276,15 @@ namespace CampusRun.Track
                 {
                     _roadLanePool.Release(roadLane);
                 }
+                else if (lane is MotorcycleLane motorcycleLane && _motorcycleLanePool != null)
+                {
+                    _motorcycleLanePool.Release(motorcycleLane);
+                }
             }
             _activeLanes.Clear();
 
             _currentMaxSpawnedZ = -3;
-            _consecutiveRoadCount = 0;
-            _currentRoadGroupLeft = 1;
+            _currentRoadGroupLeft = 2;
             _currentSafeGroupLeft = 0;
 
             SpawnInitialLanes();

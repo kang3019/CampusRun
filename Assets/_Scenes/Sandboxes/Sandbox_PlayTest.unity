@@ -407,10 +407,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CampusRun.Track.LaneManager
   _safeLanePrefab: {fileID: 7883880905502760396, guid: b2b345ea7f213384195bfa01fe7d9fcd, type: 3}
   _roadLanePrefab: {fileID: 771072547989169011, guid: 37f4339c245f9ec45936bc471939d9e9, type: 3}
+  _motorcycleLanePrefab: {fileID: 6000000000000001, guid: 8df10326afdf4433b404b4069584bcb2, type: 3}
   _initialSafeLaneCount: 6
   _forwardViewDistance: 25
   _backwardCullDistance: 10
   _maxConsecutiveRoads: 3
+  _motorcycleMinZ: 8
+  _motorcycleSpawnChance: 0.35
 --- !u!4 &1141751676
 Transform:
   m_ObjectHideFlags: 0
@@ -1075,80 +1078,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CampusRun.Player.FollowCamera
   _viewMode: 0
   _target: {fileID: 0}
-  _offset: {x: -5.5, y: 9.5, z: -6.5}
-  _smoothTime: 0.15
-  _onlyAdvanceForward: 1
-  _enableAutoScroll: 0
-  _minScrollSpeed: 0
-  _deathBehindThreshold: 2.5
---- !u!1 &2101840121
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 2101840124}
-  - component: {fileID: 2101840123}
-  - component: {fileID: 2101840122}
-  m_Layer: 0
-  m_Name: EventSystem
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &2101840122
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2101840121}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4f231c4fb786f3946a6b90b886c48677, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.EventSystems.StandaloneInputModule
-  m_SendPointerHoverToParent: 1
-  m_HorizontalAxis: Horizontal
-  m_VerticalAxis: Vertical
-  m_SubmitButton: Submit
-  m_CancelButton: Cancel
-  m_InputActionsPerSecond: 10
-  m_RepeatDelay: 0.5
-  m_ForceModuleActive: 0
---- !u!114 &2101840123
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2101840121}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 76c392e42b5098c458856cdf6ecaaaa1, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.EventSystems.EventSystem
-  m_FirstSelected: {fileID: 0}
-  m_sendNavigationEvents: 1
-  m_DragThreshold: 10
---- !u!4 &2101840124
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2101840121}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  _offset: {x: 0, y: 8.5, z: -7.5}
+  _cameraRotation: {x: 45, y: 0, z: 0}
+  _forwardSmoothSpeed: 5
+  _horizontalSmoothFactor: 0.3
+  _minScrollSpeed: 0.35
+  _deathBehindThreshold: 4.5
+  _enableAutoScroll: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
