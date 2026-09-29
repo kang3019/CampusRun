@@ -44,11 +44,11 @@ namespace CampusRun.Player
         [Tooltip("한 자리에 오래 머물 때 시간초과 탈락 활성화 여부")]
         [SerializeField] private bool _enableInactivityTimeout = true;
 
-        [Tooltip("한 자리에 오래 머물 경우 시간초과 탈락까지의 제한시간(초) - 기본 4.5초")]
-        [SerializeField] private float _inactivityTimeout = 4.5f;
+        [Tooltip("한 자리에 오래 머물 경우 시간초과 탈락까지의 제한시간(초) - 기본 6.0초")]
+        [SerializeField] private float _inactivityTimeout = 6.0f;
 
-        [Tooltip("지각 위기 경고가 발생하기 시작하는 정체 시간(초) - 기본 3.0초")]
-        [SerializeField] private float _warningThreshold = 3.0f;
+        [Tooltip("지각 위기 경고가 발생하기 시작하는 정체 시간(초) - 기본 3.5초")]
+        [SerializeField] private float _warningThreshold = 3.5f;
 
         // 내부 그리드 좌표 상태
         private int _currentGridX = 0;
@@ -67,6 +67,7 @@ namespace CampusRun.Player
         private Vector3 _originalModelScale = Vector3.one;
         private Coroutine _hopCoroutine;
         private Coroutine _drownCoroutine;
+        private Coroutine _snatchCoroutine;
         private FloatingPlank _currentMountedPlank;
         private readonly Collider[] _obstacleCheckHits = new Collider[6];
 
@@ -525,23 +526,126 @@ namespace CampusRun.Player
 
         private void CheckInactivityTimer()
         {
-            if (!_enableInactivityTimeout || !_hasMovedAtLeastOnce) return;
+            if (!_enableInactivityTimeout || !_hasMovedAtLeastOnce || !_isAlive) return;
+
+            // 이미 매에 낚아채이는 중이면 타이머 중단
+            if (_snatchCoroutine != null) return;
 
             _idleTimer += Time.deltaTime;
 
-            // 1단계: 3.0초 이상 지체 시 경고 이벤트 발행 (교수님 접근)
-            if (_idleTimer >= _warningThreshold && !_isWarningTriggered)
+            // 1단계: 3.5초 이상 지체 시 경고 이벤트 발행 (교수님 접근) 및 실시간 남은 초 갱신
+            if (_idleTimer >= _warningThreshold)
             {
-                _isWarningTriggered = true;
-                GameEvents.TriggerInactivityWarning(true);
+                if (!_isWarningTriggered)
+                {
+                    _isWarningTriggered = true;
+                    GameEvents.TriggerInactivityWarning(true);
+                }
+
+                float remaining = Mathf.Max(0f, _inactivityTimeout - _idleTimer);
+                float progress = Mathf.Clamp01((_idleTimer - _warningThreshold) / (_inactivityTimeout - _warningThreshold));
+                GameEvents.TriggerInactivityTimerUpdated(remaining, progress);
             }
 
-            // 2단계: 4.5초 제한시간 초과 시 '교수님의 매의 눈' 강제 F학점 즉사 탈락
+            // 2단계: 6.0초 제한시간 초과 시 '교수님의 매의 눈' 급습 낚아채기 연출 발동 후 F학점 탈락
             if (_idleTimer >= _inactivityTimeout)
             {
-                Debug.LogWarning("[CampusRun] 교수님의 매의 눈! 등굣길에서 너무 오래 지체하여 F학점 탈락했습니다.");
-                Die("🦅 교수님의 매의 눈: 1교시 지각으로 강제 F학점을 받았습니다!");
+                _snatchCoroutine = StartCoroutine(HawkSnatchRoutine());
             }
+        }
+
+        /// <summary>
+        /// 길건너 친구들 특유의 '독수리 낚아채기'를 패러디한 '교수님의 매 급습' 탈락 연출입니다.
+        /// 하늘 뒤편에서 매가 쏜살같이 급강하하여 플레이어를 발톱으로 낚아채 하늘 위로 데려갑니다.
+        /// </summary>
+        private IEnumerator HawkSnatchRoutine()
+        {
+            _isControlEnabled = false;
+
+            if (_isWarningTriggered)
+            {
+                _isWarningTriggered = false;
+                GameEvents.TriggerInactivityWarning(false);
+            }
+
+            // 1. 교수님의 매(Hawk) 임시 연출 오브젝트 생성
+            GameObject hawkObj = new GameObject("[Hawk_Professor_Snatcher]");
+            
+            // 몸통
+            GameObject body = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            body.name = "Body";
+            body.transform.SetParent(hawkObj.transform, false);
+            body.transform.localScale = new Vector3(0.9f, 0.45f, 1.4f);
+            Destroy(body.GetComponent<Collider>());
+            
+            // 날개 (좌우로 넓게 펼친 날개)
+            GameObject wings = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            wings.name = "Wings";
+            wings.transform.SetParent(hawkObj.transform, false);
+            wings.transform.localPosition = new Vector3(0f, 0.1f, 0.1f);
+            wings.transform.localScale = new Vector3(2.6f, 0.12f, 0.8f);
+            Destroy(wings.GetComponent<Collider>());
+
+            // 황금빛 부리
+            GameObject beak = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            beak.name = "Beak";
+            beak.transform.SetParent(hawkObj.transform, false);
+            beak.transform.localPosition = new Vector3(0f, -0.05f, 0.8f);
+            beak.transform.localScale = new Vector3(0.28f, 0.22f, 0.35f);
+            Destroy(beak.GetComponent<Collider>());
+
+            // 컬러 설정 (어두운 브라운 몸체, 황금 부리)
+            Renderer bodyRend = body.GetComponent<Renderer>();
+            if (bodyRend != null) bodyRend.material.color = new Color(0.24f, 0.15f, 0.08f);
+            Renderer wingsRend = wings.GetComponent<Renderer>();
+            if (wingsRend != null) wingsRend.material.color = new Color(0.18f, 0.10f, 0.05f);
+            Renderer beakRend = beak.GetComponent<Renderer>();
+            if (beakRend != null) beakRend.material.color = new Color(1f, 0.75f, 0.1f);
+
+            Vector3 playerPos = transform.position;
+            Vector3 startPos = playerPos + new Vector3(-2f, 8.5f, -7.5f);
+            Vector3 snatchPos = playerPos + new Vector3(0f, 0.35f, 0f);
+            Vector3 escapePos = playerPos + new Vector3(3f, 14f, 12f);
+
+            hawkObj.transform.position = startPos;
+            hawkObj.transform.LookAt(snatchPos);
+
+            // 1단계: 0.25초 만에 하늘 뒤편에서 급강하(Swoop Down)
+            float swoopDuration = 0.25f;
+            float elapsed = 0f;
+            while (elapsed < swoopDuration)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / swoopDuration);
+                float smoothT = Mathf.SmoothStep(0f, 1f, t);
+                hawkObj.transform.position = Vector3.Lerp(startPos, snatchPos, smoothT);
+                hawkObj.transform.LookAt(snatchPos);
+                yield return null;
+            }
+
+            // 2단계: 플레이어 낚아채기 (매에 달라붙음)
+            hawkObj.transform.position = snatchPos;
+            transform.SetParent(hawkObj.transform, true);
+            hawkObj.transform.LookAt(escapePos);
+
+            // 3단계: 0.35초 만에 하늘 높이 솟구치며 도주(Escape Skyward)
+            float flyDuration = 0.35f;
+            elapsed = 0f;
+            while (elapsed < flyDuration)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / flyDuration);
+                float smoothT = Mathf.SmoothStep(0f, 1f, t);
+                hawkObj.transform.position = Vector3.Lerp(snatchPos, escapePos, smoothT);
+                yield return null;
+            }
+
+            // 4단계: 탈락 확정 및 오브젝트 정리
+            transform.SetParent(null, true);
+            if (hawkObj != null) Destroy(hawkObj);
+
+            Die("🦅 교수님의 매의 눈: 1교시 지각으로 강제 F학점을 받았습니다!");
+            _snatchCoroutine = null;
         }
 
         /// <summary>
@@ -593,6 +697,15 @@ namespace CampusRun.Player
         {
             if (_hopCoroutine != null) StopCoroutine(_hopCoroutine);
             if (_drownCoroutine != null) StopCoroutine(_drownCoroutine);
+
+            if (_snatchCoroutine != null)
+            {
+                StopCoroutine(_snatchCoroutine);
+                _snatchCoroutine = null;
+                GameObject existingHawk = GameObject.Find("[Hawk_Professor_Snatcher]");
+                if (existingHawk != null) Destroy(existingHawk);
+                transform.SetParent(null, true);
+            }
 
             if (_currentMountedPlank != null)
             {

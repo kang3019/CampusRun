@@ -63,10 +63,14 @@ namespace CampusRun.Core
         /// <summary> 제자리에 너무 오래 머물러 지각 위기일 때 시각 경고를 표시/해제합니다. (true: 경고 시작, false: 경고 해제) </summary>
         public static event Action<bool> OnInactivityWarning;
 
+        /// <summary> 지각 위기 남은 시간과 진행률이 갱신될 때 발생합니다. (남은 초, 0~1 진행률) </summary>
+        public static event Action<float, float> OnInactivityTimerUpdated;
+
         public static void TriggerPlayerHopped(int playerGridZ) => OnPlayerHopped?.Invoke(playerGridZ);
         public static void TriggerPlayerGridMoved(Vector3Int newGridPos) => OnPlayerGridMoved?.Invoke(newGridPos);
         public static void TriggerPlayerDied(string deathReason, int finalDistance) => OnPlayerDied?.Invoke(deathReason, finalDistance);
         public static void TriggerInactivityWarning(bool isWarning) => OnInactivityWarning?.Invoke(isWarning);
+        public static void TriggerInactivityTimerUpdated(float remainingSeconds, float progress) => OnInactivityTimerUpdated?.Invoke(remainingSeconds, progress);
 
         #endregion
 
@@ -115,6 +119,7 @@ namespace CampusRun.Core
             OnPlayerGridMoved = null;
             OnPlayerDied = null;
             OnInactivityWarning = null;
+            OnInactivityTimerUpdated = null;
 
             OnScoreChanged = null;
             OnCoinCollected = null;

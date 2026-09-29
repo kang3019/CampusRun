@@ -1038,8 +1038,8 @@ MonoBehaviour:
   _jumpStretchScale: {x: 0.8, y: 1.25, z: 0.8}
   _landSquashScale: {x: 1.25, y: 0.75, z: 1.25}
   _enableInactivityTimeout: 1
-  _inactivityTimeout: 4.5
-  _warningThreshold: 3
+  _inactivityTimeout: 6
+  _warningThreshold: 3.5
 --- !u!136 &1454545270
 CapsuleCollider:
   m_ObjectHideFlags: 0
