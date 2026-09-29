@@ -134,4 +134,4 @@ MonoBehaviour:
   _maxSpeed: 10.5
   _minClearWindow: 4.2
   _maxClearWindow: 6.8
-  _spawnBoundaryX: 13
+  _spawnBoundaryX: 14.5

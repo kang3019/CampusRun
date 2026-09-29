@@ -29,8 +29,17 @@ namespace CampusRun.Player
         [Tooltip("추격할 플레이어의 Transform (비어있으면 자동 탐색)")]
         [SerializeField] private Transform _target;
 
-        [Tooltip("플레이어 기준 카메라의 상대 위치 (대각선 모드: X=-5.5, Y=9.0, Z=-6.5)")]
-        [SerializeField] private Vector3 _offset = new Vector3(-5.5f, 9.0f, -6.5f);
+        [Tooltip("플레이어 기준 카메라의 상대 위치 (기본: X=-4.8, Y=7.8, Z=-8.2)")]
+        [SerializeField] private Vector3 _offset = new Vector3(-4.8f, 7.8f, -8.2f);
+
+        [Header("--- 카메라 시점 각도 (눈높이 조절) ---")]
+        [Tooltip("상하 내려다보는 각도 (작을수록 눈높이에 가까워짐, 기본: 38도)")]
+        [Range(15f, 60f)]
+        [SerializeField] private float _pitchAngle = 38f;
+
+        [Tooltip("좌우 회전 각도 (IsometricLeft: 25도, Straight: 0도)")]
+        [Range(-60f, 60f)]
+        [SerializeField] private float _yawAngle = 25f;
 
         [Header("--- 추격 부드러움 (Damping) ---")]
         [Tooltip("카메라 추격 지연 시간(초) - 작을수록 즉각 반응")]
@@ -81,7 +90,10 @@ namespace CampusRun.Player
 
         private void OnValidate()
         {
-            ApplyViewMode();
+            if (_viewMode != CameraViewMode.Custom)
+            {
+                ApplyViewMode();
+            }
             ApplyFixedRotation();
         }
 
@@ -90,13 +102,19 @@ namespace CampusRun.Player
             switch (_viewMode)
             {
                 case CameraViewMode.IsometricLeft:
-                    _offset = new Vector3(-5.5f, 9.5f, -6.5f);
+                    _offset = new Vector3(-4.8f, 7.8f, -8.2f);
+                    _pitchAngle = 38f;
+                    _yawAngle = 25f;
                     break;
                 case CameraViewMode.IsometricRight:
-                    _offset = new Vector3(5.5f, 9.5f, -6.5f);
+                    _offset = new Vector3(4.8f, 7.8f, -8.2f);
+                    _pitchAngle = 38f;
+                    _yawAngle = -25f;
                     break;
                 case CameraViewMode.Straight:
-                    _offset = new Vector3(0f, 9.0f, -7.0f);
+                    _offset = new Vector3(0f, 7.5f, -8.5f);
+                    _pitchAngle = 36f;
+                    _yawAngle = 0f;
                     break;
                 case CameraViewMode.Custom:
                     // 사용자 임의 설정 유지
@@ -106,26 +124,15 @@ namespace CampusRun.Player
 
         private void ApplyFixedRotation()
         {
-            switch (_viewMode)
-            {
-                case CameraViewMode.IsometricLeft:
-                    transform.rotation = Quaternion.Euler(45f, 30f, 0f);
-                    break;
-                case CameraViewMode.IsometricRight:
-                    transform.rotation = Quaternion.Euler(45f, -30f, 0f);
-                    break;
-                case CameraViewMode.Straight:
-                    transform.rotation = Quaternion.Euler(50f, 0f, 0f);
-                    break;
-                case CameraViewMode.Custom:
-                    // 사용자 임의 회전 유지
-                    break;
-            }
+            transform.rotation = Quaternion.Euler(_pitchAngle, _yawAngle, 0f);
         }
 
         private void Awake()
         {
-            ApplyViewMode();
+            if (_viewMode != CameraViewMode.Custom)
+            {
+                ApplyViewMode();
+            }
             ApplyFixedRotation();
             FindTargetIfNull();
         }
@@ -197,7 +204,7 @@ namespace CampusRun.Player
         {
             if (_target == null)
             {
-                _playerController = Object.FindFirstObjectByType<GridPlayerController>();
+                _playerController = Object.FindAnyObjectByType<GridPlayerController>();
                 if (_playerController != null)
                 {
                     _target = _playerController.transform;

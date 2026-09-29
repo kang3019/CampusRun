@@ -16,8 +16,8 @@ namespace CampusRun.Obstacles
         [Tooltip("초당 이동 속도")]
         [SerializeField] private float _speed = 8.5f;
 
-        [Tooltip("길의 양 끝에 도달 시 사라지는 X축 경계선 (도로 폭 20m 기준 ±13.5m)")]
-        [SerializeField] private float _despawnBoundaryX = 13.5f;
+        [Tooltip("길의 양 끝에 도달 시 사라지는 X축 경계선 (도로 폭 20m 기준 ±15.5m)")]
+        [SerializeField] private float _despawnBoundaryX = 15.5f;
 
         private Action<MovingVehicle> _onDespawnCallback;
         private bool _isActive = false;
