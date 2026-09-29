@@ -14,8 +14,11 @@ namespace CampusRun.UI
     public class InGameUIManager : MonoBehaviour
     {
         [Header("--- 인게임 실시간 점수 HUD ---")]
-        [Tooltip("실시간 전진 점수 텍스트 (0, 1, 2, 3...)")]
+        [Tooltip("실시간 전진 거리 텍스트 (예: 150m)")]
         [SerializeField] private Text _scoreText;
+
+        [Tooltip("제자리 지체 시 깜빡이는 지각 경고 배너 텍스트")]
+        [SerializeField] private Text _warningBannerText;
 
         [Header("--- 게임오버 성적표 패널 ---")]
         [Tooltip("사망 시 활성화될 게임오버 팝업 패널")]
@@ -24,7 +27,10 @@ namespace CampusRun.UI
         [Tooltip("탈락 사유 텍스트")]
         [SerializeField] private Text _deathReasonText;
 
-        [Tooltip("최종 기록 텍스트")]
+        [Tooltip("학점 등급 뱃지 텍스트 (A+, B0, F 등)")]
+        [SerializeField] private Text _gradeBadgeText;
+
+        [Tooltip("최종 거리 텍스트")]
         [SerializeField] private Text _finalScoreText;
 
         [Tooltip("최고 기록 텍스트")]
@@ -36,6 +42,7 @@ namespace CampusRun.UI
         private const string HighScoreKey = "CampusRun_HighScore";
         private int _currentScore = 0;
         private bool _isGameOver = false;
+        private Coroutine _warningBlinkRoutine;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void AutoInitializeInScene()
@@ -58,6 +65,11 @@ namespace CampusRun.UI
                 _gameOverPanel.SetActive(false);
             }
 
+            if (_warningBannerText != null)
+            {
+                _warningBannerText.gameObject.SetActive(false);
+            }
+
             if (_retryButton != null)
             {
                 _retryButton.onClick.RemoveAllListeners();
@@ -69,12 +81,16 @@ namespace CampusRun.UI
         {
             GameEvents.OnScoreChanged += UpdateScoreDisplay;
             GameEvents.OnPlayerDied += ShowGameOverPanel;
+            GameEvents.OnInactivityWarning += HandleInactivityWarning;
+            GameEvents.OnInactivityTimerUpdated += HandleInactivityTimerUpdated;
         }
 
         private void OnDisable()
         {
             GameEvents.OnScoreChanged -= UpdateScoreDisplay;
             GameEvents.OnPlayerDied -= ShowGameOverPanel;
+            GameEvents.OnInactivityWarning -= HandleInactivityWarning;
+            GameEvents.OnInactivityTimerUpdated -= HandleInactivityTimerUpdated;
         }
 
         private void Start()
@@ -170,7 +186,7 @@ namespace CampusRun.UI
                 _scoreText.fontStyle = FontStyle.Bold;
                 _scoreText.color = Color.white;
                 _scoreText.alignment = TextAnchor.UpperLeft;
-                _scoreText.text = "0";
+                _scoreText.text = "0m";
 
                 // 또렷한 검은색 그림자
                 Shadow shadow = scoreObj.AddComponent<Shadow>();
@@ -181,7 +197,36 @@ namespace CampusRun.UI
                 scoreObj.transform.localScale = new Vector3(0.9f, 0.9f, 0.9f);
             }
 
-            // 3. 게임오버 팝업 패널 생성 (사망 시 활성화)
+            // 3. 화면 상단 중앙 지각 위기 경고 배너 생성
+            if (_warningBannerText == null)
+            {
+                GameObject bannerObj = new GameObject("Warning_Banner_Text");
+                bannerObj.transform.SetParent(canvas.transform, false);
+
+                RectTransform bannerRect = bannerObj.AddComponent<RectTransform>();
+                bannerRect.anchorMin = new Vector2(0.5f, 1f); // 상단 중앙
+                bannerRect.anchorMax = new Vector2(0.5f, 1f);
+                bannerRect.pivot = new Vector2(0.5f, 1f);
+                bannerRect.anchoredPosition = new Vector2(0f, -50f);
+                bannerRect.sizeDelta = new Vector2(700f, 70f);
+
+                _warningBannerText = bannerObj.AddComponent<Text>();
+                _warningBannerText.font = defaultFont;
+                _warningBannerText.fontSize = 32;
+                _warningBannerText.fontStyle = FontStyle.Bold;
+                _warningBannerText.color = new Color(1f, 0.35f, 0.1f);
+                _warningBannerText.alignment = TextAnchor.MiddleCenter;
+                _warningBannerText.text = "⚠️ 지각 위기! 교수님이 다가옵니다!";
+
+                Shadow bannerShadow = bannerObj.AddComponent<Shadow>();
+                bannerShadow.effectColor = new Color(0f, 0f, 0f, 0.9f);
+                bannerShadow.effectDistance = new Vector2(2f, -2f);
+
+                bannerObj.transform.localScale = new Vector3(0.9f, 0.9f, 0.9f);
+                bannerObj.SetActive(false);
+            }
+
+            // 4. 게임오버 팝업 패널 생성 (사망 시 활성화)
             if (_gameOverPanel == null)
             {
                 // 반투명 어두운 전체 배경
@@ -204,7 +249,7 @@ namespace CampusRun.UI
                 boxRect.anchorMin = new Vector2(0.5f, 0.5f);
                 boxRect.anchorMax = new Vector2(0.5f, 0.5f);
                 boxRect.pivot = new Vector2(0.5f, 0.5f);
-                boxRect.sizeDelta = new Vector2(540f, 460f);
+                boxRect.sizeDelta = new Vector2(580f, 520f);
 
                 // 스케일 0.9 고정
                 boxObj.transform.localScale = new Vector3(0.9f, 0.9f, 0.9f);
@@ -216,8 +261,8 @@ namespace CampusRun.UI
                 GameObject titleObj = new GameObject("Title_Text");
                 titleObj.transform.SetParent(boxObj.transform, false);
                 RectTransform titleRect = titleObj.AddComponent<RectTransform>();
-                titleRect.anchoredPosition = new Vector2(0f, 145f);
-                titleRect.sizeDelta = new Vector2(500f, 60f);
+                titleRect.anchoredPosition = new Vector2(0f, 180f);
+                titleRect.sizeDelta = new Vector2(520f, 60f);
                 Text titleText = titleObj.AddComponent<Text>();
                 titleText.font = defaultFont;
                 titleText.fontSize = 48;
@@ -230,48 +275,62 @@ namespace CampusRun.UI
                 GameObject reasonObj = new GameObject("Reason_Text");
                 reasonObj.transform.SetParent(boxObj.transform, false);
                 RectTransform reasonRect = reasonObj.AddComponent<RectTransform>();
-                reasonRect.anchoredPosition = new Vector2(0f, 80f);
-                reasonRect.sizeDelta = new Vector2(480f, 50f);
+                reasonRect.anchoredPosition = new Vector2(0f, 120f);
+                reasonRect.sizeDelta = new Vector2(520f, 50f);
                 _deathReasonText = reasonObj.AddComponent<Text>();
                 _deathReasonText.font = defaultFont;
-                _deathReasonText.fontSize = 25;
+                _deathReasonText.fontSize = 24;
                 _deathReasonText.color = new Color(0.85f, 0.85f, 0.85f);
                 _deathReasonText.alignment = TextAnchor.MiddleCenter;
                 _deathReasonText.text = "셔틀버스를 피하지 못했습니다!";
 
-                // [최종 점수]
+                // [최종 거리]
                 GameObject finalObj = new GameObject("FinalScore_Text");
                 finalObj.transform.SetParent(boxObj.transform, false);
                 RectTransform finalRect = finalObj.AddComponent<RectTransform>();
-                finalRect.anchoredPosition = new Vector2(0f, 18f);
-                finalRect.sizeDelta = new Vector2(480f, 60f);
+                finalRect.anchoredPosition = new Vector2(0f, 55f);
+                finalRect.sizeDelta = new Vector2(520f, 55f);
                 _finalScoreText = finalObj.AddComponent<Text>();
                 _finalScoreText.font = defaultFont;
-                _finalScoreText.fontSize = 40;
+                _finalScoreText.fontSize = 38;
                 _finalScoreText.fontStyle = FontStyle.Bold;
                 _finalScoreText.color = Color.white;
                 _finalScoreText.alignment = TextAnchor.MiddleCenter;
-                _finalScoreText.text = "최종 점수: 0";
+                _finalScoreText.text = "최종 거리: 0m";
+
+                // [학점 뱃지]
+                GameObject gradeObj = new GameObject("Grade_Badge_Text");
+                gradeObj.transform.SetParent(boxObj.transform, false);
+                RectTransform gradeRect = gradeObj.AddComponent<RectTransform>();
+                gradeRect.anchoredPosition = new Vector2(0f, -5f);
+                gradeRect.sizeDelta = new Vector2(520f, 55f);
+                _gradeBadgeText = gradeObj.AddComponent<Text>();
+                _gradeBadgeText.font = defaultFont;
+                _gradeBadgeText.fontSize = 32;
+                _gradeBadgeText.fontStyle = FontStyle.Bold;
+                _gradeBadgeText.color = new Color(0.95f, 0.25f, 0.25f);
+                _gradeBadgeText.alignment = TextAnchor.MiddleCenter;
+                _gradeBadgeText.text = "학점: F (재수강 확정)";
 
                 // [최고 기록]
                 GameObject highObj = new GameObject("HighScore_Text");
                 highObj.transform.SetParent(boxObj.transform, false);
                 RectTransform highRect = highObj.AddComponent<RectTransform>();
-                highRect.anchoredPosition = new Vector2(0f, -38f);
-                highRect.sizeDelta = new Vector2(480f, 40f);
+                highRect.anchoredPosition = new Vector2(0f, -65f);
+                highRect.sizeDelta = new Vector2(520f, 40f);
                 _highScoreText = highObj.AddComponent<Text>();
                 _highScoreText.font = defaultFont;
-                _highScoreText.fontSize = 25;
+                _highScoreText.fontSize = 24;
                 _highScoreText.color = new Color(1f, 0.82f, 0.2f); // 골드
                 _highScoreText.alignment = TextAnchor.MiddleCenter;
-                _highScoreText.text = "최고 기록: 0";
+                _highScoreText.text = "최고 기록: 0m";
 
                 // [다시 하기 버튼]
                 GameObject btnObj = new GameObject("Retry_Button");
                 btnObj.transform.SetParent(boxObj.transform, false);
                 RectTransform btnRect = btnObj.AddComponent<RectTransform>();
-                btnRect.anchoredPosition = new Vector2(0f, -125f);
-                btnRect.sizeDelta = new Vector2(300f, 75f);
+                btnRect.anchoredPosition = new Vector2(0f, -155f);
+                btnRect.sizeDelta = new Vector2(300f, 70f);
 
                 // 스케일 0.9 고정
                 btnObj.transform.localScale = new Vector3(0.9f, 0.9f, 0.9f);
@@ -295,7 +354,7 @@ namespace CampusRun.UI
                 btnTextRect.sizeDelta = btnRect.sizeDelta;
                 Text btnText = btnTextObj.AddComponent<Text>();
                 btnText.font = defaultFont;
-                btnText.fontSize = 32;
+                btnText.fontSize = 30;
                 btnText.fontStyle = FontStyle.Bold;
                 btnText.color = Color.white;
                 btnText.alignment = TextAnchor.MiddleCenter;
@@ -317,6 +376,11 @@ namespace CampusRun.UI
                 _scoreText.transform.localScale = fixedScale;
             }
 
+            if (_warningBannerText != null)
+            {
+                _warningBannerText.transform.localScale = fixedScale;
+            }
+
             if (_gameOverPanel != null)
             {
                 Transform box = _gameOverPanel.transform.Find("Dialog_Box");
@@ -332,20 +396,81 @@ namespace CampusRun.UI
             }
         }
 
-        /// <summary> 실시간 전진 점수 HUD 텍스트 갱신 (1칸 전진 시 1점) </summary>
+        /// <summary> 실시간 전진 거리 HUD 텍스트 갱신 (1칸당 10m) </summary>
         private void UpdateScoreDisplay(int score)
         {
             _currentScore = score;
             if (_scoreText != null)
             {
-                _scoreText.text = score.ToString();
+                _scoreText.text = $"{score}m";
             }
         }
 
-        /// <summary> 플레이어 사망 시 게임오버 패널 활성화 및 점수 집계 </summary>
+        /// <summary> 제자리 지체 시 지각 위기 경고 배너 점멸 처리 </summary>
+        private void HandleInactivityWarning(bool isWarning)
+        {
+            if (_warningBannerText == null) return;
+
+            if (isWarning)
+            {
+                _warningBannerText.gameObject.SetActive(true);
+                if (_warningBlinkRoutine != null) StopCoroutine(_warningBlinkRoutine);
+                _warningBlinkRoutine = StartCoroutine(WarningBlinkRoutine());
+            }
+            else
+            {
+                if (_warningBlinkRoutine != null)
+                {
+                    StopCoroutine(_warningBlinkRoutine);
+                    _warningBlinkRoutine = null;
+                }
+                _warningBannerText.gameObject.SetActive(false);
+            }
+        }
+
+        private System.Collections.IEnumerator WarningBlinkRoutine()
+        {
+            Color orange = new Color(1f, 0.45f, 0.1f);
+            Color red = new Color(1f, 0.15f, 0.15f);
+
+            while (true)
+            {
+                if (_warningBannerText != null)
+                {
+                    _warningBannerText.color = red;
+                }
+                yield return new WaitForSeconds(0.25f);
+
+                if (_warningBannerText != null)
+                {
+                    _warningBannerText.color = orange;
+                }
+                yield return new WaitForSeconds(0.25f);
+            }
+        }
+
+        /// <summary> 실시간 지각 위기 남은 시간 카운트다운 텍스트 갱신 </summary>
+        private void HandleInactivityTimerUpdated(float remainingSeconds, float progress)
+        {
+            if (_warningBannerText == null || !_warningBannerText.gameObject.activeSelf) return;
+
+            if (remainingSeconds <= 1.0f)
+            {
+                _warningBannerText.text = $"🚨 출석 마감 직전! ({remainingSeconds:0.0}초)";
+            }
+            else
+            {
+                _warningBannerText.text = $"⚠️ 지각 위기! 교수님이 다가옵니다! ({remainingSeconds:0.0}초)";
+            }
+        }
+
+        /// <summary> 플레이어 사망 시 게임오버 패널 활성화 및 성적표 발급 </summary>
         private void ShowGameOverPanel(string deathReason, int finalScore)
         {
             _isGameOver = true;
+
+            // 경고 배너 끄기
+            HandleInactivityWarning(false);
 
             EnsureEventSystem();
             EnsureHUDAndGameOverUI();
@@ -362,7 +487,7 @@ namespace CampusRun.UI
                 PlayerPrefs.Save();
             }
 
-            // 2. 탈락 사유 및 최종 점수 표시
+            // 2. 탈락 사유 및 최종 거리 표시
             if (_deathReasonText != null)
             {
                 _deathReasonText.text = deathReason;
@@ -370,21 +495,65 @@ namespace CampusRun.UI
 
             if (_finalScoreText != null)
             {
-                _finalScoreText.text = $"최종 점수: {finalScore}";
+                _finalScoreText.text = $"최종 거리: {finalScore}m";
             }
 
             if (_highScoreText != null)
             {
-                _highScoreText.text = $"최고 기록: {bestScore}";
+                _highScoreText.text = $"최고 기록: {bestScore}m";
+            }
+
+            // 3. 대학생 학점 등급 판정 및 컬러링 연출
+            if (_gradeBadgeText != null)
+            {
+                string grade = EvaluateGrade(finalScore, out Color gradeColor);
+                _gradeBadgeText.text = grade;
+                _gradeBadgeText.color = gradeColor;
             }
 
             _gameOverPanel.SetActive(true);
+        }
+
+        /// <summary>
+        /// 도달 거리(m)에 따른 대학생 학점 등급 및 축제 부스 보상 판정
+        /// </summary>
+        private string EvaluateGrade(int score, out Color color)
+        {
+            if (score >= 500)
+            {
+                color = new Color(1f, 0.85f, 0.15f); // 화려한 골드
+                return "학점: A+ (수석 졸업 - 축제 음료 쿠폰!)";
+            }
+            if (score >= 400)
+            {
+                color = new Color(0.44f, 0.88f, 0f);  // 우등생 연녹색
+                return "학점: A0 (우등생 - 간식 세트)";
+            }
+            if (score >= 300)
+            {
+                color = new Color(0.22f, 0.69f, 0f);  // 안전통과 청록색
+                return "학점: B+ (안전 통과 - 젤리 세트)";
+            }
+            if (score >= 200)
+            {
+                color = new Color(0f, 0.47f, 0.71f);  // 출석성공 하늘색
+                return "학점: B0 (출석 성공 - 사탕 획득)";
+            }
+            if (score >= 100)
+            {
+                color = new Color(0.97f, 0.50f, 0f);  // 지각모면 주황색
+                return "학점: C+ (지각 모면 - 위로 스티커)";
+            }
+
+            color = new Color(0.9f, 0.22f, 0.27f);     // 강렬한 F학점 레드
+            return "학점: F (재수강 확정 - F학점 경고장)";
         }
 
         /// <summary> 다시 시작 버튼 클릭 시 씬 새로고침 </summary>
         private void OnRetryButtonClicked()
         {
             _isGameOver = false;
+            HandleInactivityWarning(false);
             GameEvents.ClearAllSubscriptions();
             SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
         }

@@ -21,6 +21,9 @@ namespace CampusRun.Track
         [Tooltip("200m 이후 등장하는 배달 오토바이 급습 레인 프리팹")]
         [SerializeField] private MotorcycleLane _motorcycleLanePrefab;
 
+        [Tooltip("거대 물웅덩이(강물) 레인 프리팹")]
+        [SerializeField] private WaterLane _waterLanePrefab;
+
         [Header("--- 맵 생성 밸런스 설정 ---")]
         [Tooltip("게임 시작 시 시작점 주변 안전 레인 수 (Z=-2 ~ Z=3)")]
         [SerializeField] private int _initialSafeLaneCount = 6;
@@ -42,6 +45,14 @@ namespace CampusRun.Track
         [Range(0f, 1f)]
         [SerializeField] private float _motorcycleSpawnChance = 0.35f;
 
+        [Header("--- 거대 물웅덩이 기믹 설정 ---")]
+        [Tooltip("물웅덩이 레인이 등장하기 시작하는 최소 Z 좌표 (기본 12 = 120m)")]
+        [SerializeField] private int _waterLaneMinZ = 12;
+
+        [Tooltip("물웅덩이 레인 출현 확률 (0~1)")]
+        [Range(0f, 1f)]
+        [SerializeField] private float _waterLaneSpawnChance = 0.28f;
+
         // 런타임 추적 변수
         private int _currentMaxSpawnedZ = -3;
         private readonly List<BaseLane> _activeLanes = new List<BaseLane>();
@@ -50,6 +61,7 @@ namespace CampusRun.Track
         private IObjectPool<SafeLane> _safeLanePool;
         private IObjectPool<RoadLane> _roadLanePool;
         private IObjectPool<MotorcycleLane> _motorcycleLanePool;
+        private IObjectPool<WaterLane> _waterLanePool;
 
         private void Awake()
         {
@@ -110,6 +122,18 @@ namespace CampusRun.Track
                     maxSize: 15
                 );
             }
+
+            if (_waterLanePrefab != null)
+            {
+                _waterLanePool = new ObjectPool<WaterLane>(
+                    createFunc: () => Instantiate(_waterLanePrefab, transform),
+                    actionOnGet: (lane) => { },
+                    actionOnRelease: (lane) => lane.Recycle(),
+                    actionOnDestroy: (lane) => { if (lane != null) Destroy(lane.gameObject); },
+                    defaultCapacity: 6,
+                    maxSize: 18
+                );
+            }
         }
 
         private void SpawnInitialLanes()
@@ -145,9 +169,11 @@ namespace CampusRun.Track
         }
 
         // 리듬감 있는 그룹 스폰 상태 변수
-        private int _currentRoadGroupLeft = 1;   // 첫 도로는 무조건 1칸 단독 도로
-        private int _currentSafeGroupLeft = 0;   // 남은 쉼터 수
-        private float _lastRoadDirection = 1f;   // 직전 도로 방향 (+1: 오른쪽, -1: 왼쪽)
+        private int _currentRoadGroupLeft = 1;    // 첫 도로는 무조건 1칸 단독 도로
+        private int _currentWaterGroupLeft = 0;   // 남은 물웅덩이 수
+        private int _currentSafeGroupLeft = 0;    // 남은 쉼터 수
+        private float _lastRoadDirection = 1f;    // 직전 도로 방향 (+1: 오른쪽, -1: 왼쪽)
+        private float _lastWaterDirection = 1f;   // 직전 물웅덩이 표류 방향 (+1: 오른쪽, -1: 왼쪽)
 
         private void SpawnNextLane(int zIndex)
         {
@@ -157,29 +183,54 @@ namespace CampusRun.Track
                 SpawnSafeLane(zIndex);
                 _currentSafeGroupLeft--;
 
-                // 쉼터 구간이 끝나면 진행도(zIndex)에 맞춰 다음 도로 묶음 준비
+                // 쉼터 구간이 끝나면 진행도(zIndex)에 맞춰 다음 위험 구간(도로 or 거대 물웅덩이) 준비
                 if (_currentSafeGroupLeft <= 0)
                 {
-                    if (zIndex < 30)
+                    // 120m(zIndex >= _waterLaneMinZ) 이후 일정 확률로 거대 물웅덩이 구간 스폰
+                    if (zIndex >= _waterLaneMinZ && _waterLanePrefab != null && _waterLanePool != null &&
+                        Random.value < _waterLaneSpawnChance)
                     {
-                        // [초반 완벽 적응 구간]: 도로는 무조건 1칸 단독! (지나갈 수 있는 확실한 1차선 도로)
-                        _currentRoadGroupLeft = 1;
-                    }
-                    else if (zIndex < 55)
-                    {
-                        // [중반 구간]: 도로 1~2칸
-                        _currentRoadGroupLeft = Random.Range(1, 3);
+                        _currentWaterGroupLeft = (zIndex < 40) ? 1 : Random.Range(1, 3);
+                        _currentRoadGroupLeft = 0;
                     }
                     else
                     {
-                        // [심화 구간]: 도로 2~3칸
-                        _currentRoadGroupLeft = Random.Range(2, 4);
+                        _currentWaterGroupLeft = 0;
+                        if (zIndex < 30)
+                        {
+                            // [초반 완벽 적응 구간]: 도로는 무조건 1칸 단독! (지나갈 수 있는 확실한 1차선 도로)
+                            _currentRoadGroupLeft = 1;
+                        }
+                        else if (zIndex < 55)
+                        {
+                            // [중반 구간]: 도로 1~2칸
+                            _currentRoadGroupLeft = Random.Range(1, 3);
+                        }
+                        else
+                        {
+                            // [심화 구간]: 도로 2~3칸 (인스펙터 _maxConsecutiveRoads 반영)
+                            _currentRoadGroupLeft = Random.Range(2, Mathf.Max(3, _maxConsecutiveRoads + 1));
+                        }
                     }
                 }
                 return;
             }
 
-            // 2. 도로 구간일 때
+            // 2. 거대 물웅덩이 구간일 때
+            if (_currentWaterGroupLeft > 0 && _waterLanePool != null)
+            {
+                SpawnWaterLane(zIndex);
+                _currentWaterGroupLeft--;
+
+                // 물웅덩이 묶음이 끝나면 다음 안전 쉼터 보장
+                if (_currentWaterGroupLeft <= 0)
+                {
+                    _currentSafeGroupLeft = Random.Range(1, 3);
+                }
+                return;
+            }
+
+            // 3. 도로 구간일 때
             if (_currentRoadGroupLeft > 0 && _roadLanePool != null)
             {
                 SpawnRoadLane(zIndex);
@@ -237,6 +288,19 @@ namespace CampusRun.Track
             _activeLanes.Add(lane);
         }
 
+        private void SpawnWaterLane(int zIndex)
+        {
+            if (_waterLanePool == null) return;
+
+            // 인접한 물웅덩이는 표류 방향을 교차하여 리듬감과 도전 요소 제공
+            _lastWaterDirection = -_lastWaterDirection;
+
+            WaterLane lane = _waterLanePool.Get();
+            lane.SetDesiredDirection(_lastWaterDirection);
+            lane.Initialize(zIndex);
+            _activeLanes.Add(lane);
+        }
+
         private void CullOldLanes(int minZ)
         {
             for (int i = _activeLanes.Count - 1; i >= 0; i--)
@@ -257,6 +321,10 @@ namespace CampusRun.Track
                     else if (lane is MotorcycleLane motorcycleLane && _motorcycleLanePool != null)
                     {
                         _motorcycleLanePool.Release(motorcycleLane);
+                    }
+                    else if (lane is WaterLane waterLane && _waterLanePool != null)
+                    {
+                        _waterLanePool.Release(waterLane);
                     }
                 }
             }
@@ -280,12 +348,19 @@ namespace CampusRun.Track
                 {
                     _motorcycleLanePool.Release(motorcycleLane);
                 }
+                else if (lane is WaterLane waterLane && _waterLanePool != null)
+                {
+                    _waterLanePool.Release(waterLane);
+                }
             }
             _activeLanes.Clear();
 
             _currentMaxSpawnedZ = -3;
-            _currentRoadGroupLeft = 2;
+            _currentRoadGroupLeft = 1;
+            _currentWaterGroupLeft = 0;
             _currentSafeGroupLeft = 0;
+            _lastRoadDirection = 1f;
+            _lastWaterDirection = 1f;
 
             SpawnInitialLanes();
         }
