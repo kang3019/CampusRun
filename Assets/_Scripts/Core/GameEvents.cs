@@ -60,9 +60,13 @@ namespace CampusRun.Core
         /// <summary> 플레이어가 장애물에 충돌하거나 타임아웃으로 사망했을 때 발생합니다. (사망 원인 문자열, 최종 도달 거리) </summary>
         public static event Action<string, int> OnPlayerDied;
 
+        /// <summary> 제자리에 너무 오래 머물러 지각 위기일 때 시각 경고를 표시/해제합니다. (true: 경고 시작, false: 경고 해제) </summary>
+        public static event Action<bool> OnInactivityWarning;
+
         public static void TriggerPlayerHopped(int forwardDistance) => OnPlayerHopped?.Invoke(forwardDistance);
         public static void TriggerPlayerGridMoved(Vector3Int newGridPos) => OnPlayerGridMoved?.Invoke(newGridPos);
         public static void TriggerPlayerDied(string deathReason, int finalDistance) => OnPlayerDied?.Invoke(deathReason, finalDistance);
+        public static void TriggerInactivityWarning(bool isWarning) => OnInactivityWarning?.Invoke(isWarning);
 
         #endregion
 
@@ -110,6 +114,7 @@ namespace CampusRun.Core
             OnPlayerHopped = null;
             OnPlayerGridMoved = null;
             OnPlayerDied = null;
+            OnInactivityWarning = null;
 
             OnScoreChanged = null;
             OnCoinCollected = null;

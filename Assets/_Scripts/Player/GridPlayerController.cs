@@ -39,12 +39,15 @@ namespace CampusRun.Player
         [SerializeField] private Vector3 _jumpStretchScale = new Vector3(0.8f, 1.25f, 0.8f);
         [SerializeField] private Vector3 _landSquashScale = new Vector3(1.25f, 0.75f, 1.25f);
 
-        [Header("--- 타임아웃 (지체 감지 / 독수리 기믹) ---")]
-        [Tooltip("한 자리에 오래 머물 때 시간초과 탈락 활성화 여부 (개발/테스트 중에는 끄는 것을 권장)")]
-        [SerializeField] private bool _enableInactivityTimeout = false;
+        [Header("--- 타임아웃 (지체 감지 / 교수님의 매의 눈 기믹) ---")]
+        [Tooltip("한 자리에 오래 머물 때 시간초과 탈락 활성화 여부")]
+        [SerializeField] private bool _enableInactivityTimeout = true;
 
-        [Tooltip("한 자리에 오래 머물 경우 시간초과 탈락까지의 제한시간(초)")]
-        [SerializeField] private float _inactivityTimeout = 10f;
+        [Tooltip("한 자리에 오래 머물 경우 시간초과 탈락까지의 제한시간(초) - 기본 4.5초")]
+        [SerializeField] private float _inactivityTimeout = 4.5f;
+
+        [Tooltip("지각 위기 경고가 발생하기 시작하는 정체 시간(초) - 기본 3.0초")]
+        [SerializeField] private float _warningThreshold = 3.0f;
 
         // 내부 그리드 좌표 상태
         private int _currentGridX = 0;
@@ -56,6 +59,8 @@ namespace CampusRun.Player
         private bool _isAlive = true;
         private bool _isControlEnabled = true;
         private float _idleTimer = 0f;
+        private bool _hasMovedAtLeastOnce = false;
+        private bool _isWarningTriggered = false;
 
         // 캐싱 변수
         private Vector3 _originalModelScale = Vector3.one;
@@ -242,14 +247,21 @@ namespace CampusRun.Player
             // 상태 갱신
             _currentGridX = targetX;
             _currentGridZ = targetZ;
+            _hasMovedAtLeastOnce = true;
             _idleTimer = 0f; // 이동 시 활동 타이머 리셋
 
-            // 최고 기록 전진 여부 확인 (좌우, 뒤로는 점수 변동 없고 오직 앞으로 최고 기록 갱신 시에만 +1점)
+            if (_isWarningTriggered)
+            {
+                _isWarningTriggered = false;
+                GameEvents.TriggerInactivityWarning(false);
+            }
+
+            // 최고 기록 전진 여부 확인 (앞으로 최고 기록 갱신 시 1칸당 10m 누적)
             if (_currentGridZ > _maxReachedGridZ)
             {
                 _maxReachedGridZ = _currentGridZ;
-                GameEvents.TriggerPlayerHopped(_maxReachedGridZ);
-                GameEvents.TriggerScoreChanged(_maxReachedGridZ); // 앞으로 전진 1칸당 1점
+                GameEvents.TriggerPlayerHopped(_maxReachedGridZ * 10);
+                GameEvents.TriggerScoreChanged(_maxReachedGridZ * 10); // 앞으로 전진 1칸당 10m
             }
 
             GameEvents.TriggerPlayerGridMoved(new Vector3Int(_currentGridX, 0, _currentGridZ));
@@ -400,15 +412,22 @@ namespace CampusRun.Player
 
         private void CheckInactivityTimer()
         {
-            if (!_enableInactivityTimeout) return;
+            if (!_enableInactivityTimeout || !_hasMovedAtLeastOnce) return;
 
             _idleTimer += Time.deltaTime;
 
+            // 1단계: 3.0초 이상 지체 시 경고 이벤트 발행 (교수님 접근)
+            if (_idleTimer >= _warningThreshold && !_isWarningTriggered)
+            {
+                _isWarningTriggered = true;
+                GameEvents.TriggerInactivityWarning(true);
+            }
+
+            // 2단계: 4.5초 제한시간 초과 시 '교수님의 매의 눈' 강제 F학점 즉사 탈락
             if (_idleTimer >= _inactivityTimeout)
             {
-                // 시간 초과 탈락 (길건너 친구들의 독수리 낚아채기 대응)
-                Debug.LogWarning("[CampusRun] 시간 초과! 등굣길에서 너무 오래 망설여 탈락했습니다.");
-                Die("시간 초과! 등굣길에서 너무 오래 망설였습니다.");
+                Debug.LogWarning("[CampusRun] 교수님의 매의 눈! 등굣길에서 너무 오래 지체하여 F학점 탈락했습니다.");
+                Die("🦅 교수님의 매의 눈: 1교시 지각으로 강제 F학점을 받았습니다!");
             }
         }
 
@@ -422,7 +441,13 @@ namespace CampusRun.Player
             _isAlive = false;
             _isControlEnabled = false;
 
-            Debug.LogWarning($"[CampusRun] 게임오버! {deathReason} (최종 점수: {_maxReachedGridZ}점)");
+            if (_isWarningTriggered)
+            {
+                _isWarningTriggered = false;
+                GameEvents.TriggerInactivityWarning(false);
+            }
+
+            Debug.LogWarning($"[CampusRun] 게임오버! {deathReason} (최종 거리: {_maxReachedGridZ * 10}m)");
 
             if (_hopCoroutine != null)
             {
@@ -435,8 +460,8 @@ namespace CampusRun.Player
                 _visualModelTransform.localScale = _originalModelScale;
             }
 
-            // 사망 이벤트 발생 (앞으로 전진한 1칸당 1점과 동일하게 전달)
-            GameEvents.TriggerPlayerDied(deathReason, _maxReachedGridZ);
+            // 사망 이벤트 발생 (앞으로 전진한 1칸당 10m 기준으로 전달)
+            GameEvents.TriggerPlayerDied(deathReason, _maxReachedGridZ * 10);
             GameEvents.TriggerGameStateChanged(GameState.GameOver);
         }
 
@@ -453,6 +478,10 @@ namespace CampusRun.Player
             _currentGridZ = 0;
             _maxReachedGridZ = 0;
             _idleTimer = 0f;
+            _hasMovedAtLeastOnce = false;
+            _isWarningTriggered = false;
+            GameEvents.TriggerInactivityWarning(false);
+
             _isHopping = false;
             _isAlive = true;
             _isControlEnabled = true;
