@@ -38,7 +38,19 @@ namespace CampusRun.Player
                 string reason = _defaultDeathReason;
                 string objectName = hitObject.name;
 
-                if (objectName.Contains("Bus") || objectName.Contains("Shuttle"))
+                if (objectName.Contains("Train") || objectName.Contains("Subway") || objectName.Contains("Motorcycle") || objectName.Contains("Bike"))
+                {
+                    reason = "🚆 캠퍼스 관통 지상철(오토바이)에 치였습니다!";
+                }
+                else if (objectName.Contains("Student") || objectName.Contains("Late"))
+                {
+                    reason = "🏃 전력 질주하는 타과 지각생과 부딪혀 넘어졌습니다!";
+                }
+                else if (objectName.Contains("Puddle") || objectName.Contains("Water"))
+                {
+                    reason = "🌊 거대 물웅덩이에 빠져 옷을 모두 버렸습니다!";
+                }
+                else if (objectName.Contains("Bus") || objectName.Contains("Shuttle"))
                 {
                     reason = "💥 1교시 셔틀버스를 피하지 못했습니다!";
                 }
