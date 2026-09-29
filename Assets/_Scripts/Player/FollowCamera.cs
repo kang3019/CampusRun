@@ -21,10 +21,10 @@ namespace CampusRun.Player
 
         [Header("--- Crossy Road 스크롤 압박 (Trailing Threat) ---")]
         [Tooltip("플레이어가 가만히 있어도 카메라가 앞으로 전진하는 최소 속도 (초당 전진 미터)")]
-        [SerializeField] private float _minScrollSpeed = 1.0f;
+        [SerializeField] private float _minScrollSpeed = 0.35f;
 
         [Tooltip("카메라 시야 기준 플레이어가 화면 아래로 몇 미터 이상 뒤처지면 탈락할지")]
-        [SerializeField] private float _deathBehindThreshold = 2.0f;
+        [SerializeField] private float _deathBehindThreshold = 4.5f;
 
         [Tooltip("자동 스크롤 및 화면 밖 탈락 활성화 여부")]
         [SerializeField] private bool _enableAutoScroll = true;
@@ -32,10 +32,46 @@ namespace CampusRun.Player
         private Vector3 _currentVelocity;
         private float _currentBaseZ = 0f;
         private GridPlayerController _playerController;
+        private bool _hasGameStarted = false;
 
         private void Awake()
         {
             FindTargetIfNull();
+        }
+
+        private void OnEnable()
+        {
+            CampusRun.Core.GameEvents.OnPlayerHopped += HandlePlayerHopped;
+            CampusRun.Core.GameEvents.OnGameRestarted += HandleGameRestarted;
+        }
+
+        private void OnDisable()
+        {
+            CampusRun.Core.GameEvents.OnPlayerHopped -= HandlePlayerHopped;
+            CampusRun.Core.GameEvents.OnGameRestarted -= HandleGameRestarted;
+        }
+
+        private void HandlePlayerHopped(int playerZ)
+        {
+            // 플레이어가 첫 점프를 시작하면 자동 스크롤 활성화
+            if (!_hasGameStarted)
+            {
+                _hasGameStarted = true;
+                if (_target != null)
+                {
+                    _currentBaseZ = _target.position.z;
+                }
+            }
+        }
+
+        private void HandleGameRestarted()
+        {
+            _hasGameStarted = false;
+            SnapToTarget();
+            if (_target != null)
+            {
+                _currentBaseZ = _target.position.z;
+            }
         }
 
         private void Start()
@@ -58,8 +94,8 @@ namespace CampusRun.Player
                 _currentBaseZ = _target.position.z;
             }
 
-            // 1. 자동 스크롤 Z축 계산 (플레이어가 가만히 있어도 카메라는 서서히 앞으로 전진)
-            if (_enableAutoScroll)
+            // 1. 자동 스크롤 Z축 계산 (플레이어가 첫 점프를 한 이후부터 서서히 압박)
+            if (_enableAutoScroll && _hasGameStarted)
             {
                 _currentBaseZ += _minScrollSpeed * Time.deltaTime;
                 // 플레이어가 앞서가면 카메라도 즉시 앞선 위치로 갱신
@@ -78,8 +114,11 @@ namespace CampusRun.Player
             Vector3 lookTarget = new Vector3(_target.position.x, _target.position.y + 0.5f, _currentBaseZ);
             transform.LookAt(lookTarget);
 
-            // 3. 화면 아래쪽으로 밀려남 감지 (독수리 낚아채기 대체 탈락 기믹)
-            CheckPlayerFellBehind();
+            // 3. 화면 아래쪽으로 밀려남 감지 (첫 이동 시작 전에는 탈락 판정 미작동)
+            if (_hasGameStarted)
+            {
+                CheckPlayerFellBehind();
+            }
         }
 
         private void CheckPlayerFellBehind()
@@ -89,7 +128,7 @@ namespace CampusRun.Player
             // 카메라의 기준 진행도보다 플레이어가 화면 아래로 너무 많이 밀려났을 때
             if (_target.position.z < _currentBaseZ - _deathBehindThreshold)
             {
-                string reason = "🦅 화면 밖으로 밀려나 지각 탈락했습니다!";
+                string reason = "🦅 교수님의 매의 눈: 1교시 지각으로 F학점을 받았습니다!";
                 Debug.LogWarning($"[CampusRun] {reason} (기준 진행도: {_currentBaseZ:F1}m, 플레이어 위치: {_target.position.z:F1}m)");
                 _playerController.Die(reason);
             }

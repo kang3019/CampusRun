@@ -17,19 +17,25 @@ namespace CampusRun.Track
 
         [Tooltip("이 안전 레인에 고정 장애물이 배치될 확률 (0~1)")]
         [Range(0f, 1f)]
-        [SerializeField] private float _obstacleSpawnChance = 0.5f;
+        [SerializeField] private float _obstacleSpawnChance = 0.35f;
 
-        [Tooltip("한 레인에 배치될 수 있는 최대 장애물 수")]
-        [SerializeField] private int _maxObstaclesPerLane = 2;
+        [Tooltip("한 레인에 배치될 수 있는 최대 장애물 수 (통행로 보장을 위해 1개 권장)")]
+        [SerializeField] private int _maxObstaclesPerLane = 1;
 
         [Tooltip("장애물이 스폰될 수 있는 X축 그리드 범위 (최소~최대)")]
         [SerializeField] private int _minGridX = -3;
         [SerializeField] private int _maxGridX = 3;
 
+        [Tooltip("게임 시작 후 장애물이 전혀 나오지 않는 초기 튜토리얼 Z 거리")]
+        [SerializeField] private int _safeStartZoneZ = 6;
+
         // 런타임 추적 및 풀링
         private IObjectPool<StationaryObstacle> _obstaclePool;
         private readonly List<StationaryObstacle> _activeObstacles = new List<StationaryObstacle>();
         private readonly List<int> _availableXPositions = new List<int>();
+
+        // 연속 차단 방지를 위한 정적 직전 스폰 위치 추적
+        private static int _lastSpawnedX = 999;
 
         private void Awake()
         {
@@ -76,8 +82,8 @@ namespace CampusRun.Track
                 InitializePool();
             }
 
-            // 시작 지점(Z <= 3)은 플레이어가 스폰되는 초기 안전 구간이므로 장애물 미배치
-            if (LaneZIndex > 3 && _obstaclePrefab != null && _obstaclePool != null)
+            // 시작 지점(Z <= _safeStartZoneZ)은 조작 학습 구간이므로 무조건 100% 안전하게 비워둠
+            if (LaneZIndex > _safeStartZoneZ && _obstaclePrefab != null && _obstaclePool != null)
             {
                 if (Random.value < _obstacleSpawnChance)
                 {
@@ -88,23 +94,49 @@ namespace CampusRun.Track
 
         private void SpawnObstacles()
         {
-            // 사용 가능한 X 그리드 좌표 목록 수집 (GC 방지)
+            // 통행 가능성(Pathability) 보장:
+            // 1. 후보 좌표 수집 (직전 레인에서 스폰된 X 좌표는 제외하여 일자 경로 차단 방지)
             _availableXPositions.Clear();
             for (int x = _minGridX; x <= _maxGridX; x++)
             {
+                // 직전 레인과 동일한 X는 제외
+                if (x == _lastSpawnedX) continue;
                 _availableXPositions.Add(x);
             }
 
-            int spawnCount = Random.Range(1, Mathf.Min(_maxObstaclesPerLane + 1, _availableXPositions.Count));
+            if (_availableXPositions.Count == 0) return;
 
-            for (int i = 0; i < spawnCount; i++)
+            int targetSpawnCount = Mathf.Clamp(_maxObstaclesPerLane, 1, 2);
+            int previousChosenX = 999;
+
+            for (int i = 0; i < targetSpawnCount; i++)
             {
-                int randomIndex = Random.Range(0, _availableXPositions.Count);
-                int chosenX = _availableXPositions[randomIndex];
-                _availableXPositions.RemoveAt(randomIndex); // 동일 레인 내 중복 좌표 방지
+                if (_availableXPositions.Count == 0) break;
+
+                // 후보 중 랜덤 선택하되, 2개 이상일 경우 최소 3칸 이상 떨어지도록 필터링
+                int chosenIndex = -1;
+                for (int attempt = 0; attempt < 10; attempt++)
+                {
+                    int candidateIndex = Random.Range(0, _availableXPositions.Count);
+                    int candidateX = _availableXPositions[candidateIndex];
+
+                    // 첫 번째 장애물이거나 이전 선택과 3칸 이상 떨어져 벽을 만들지 않을 때
+                    if (previousChosenX == 999 || Mathf.Abs(candidateX - previousChosenX) >= 3)
+                    {
+                        chosenIndex = candidateIndex;
+                        break;
+                    }
+                }
+
+                if (chosenIndex == -1) break;
+
+                int chosenX = _availableXPositions[chosenIndex];
+                _availableXPositions.RemoveAt(chosenIndex);
+                previousChosenX = chosenX;
+                _lastSpawnedX = chosenX;
 
                 StationaryObstacle obstacle = _obstaclePool.Get();
-                Vector3 spawnPosition = new Vector3(chosenX, 0.25f, LaneZIndex);
+                Vector3 spawnPosition = new Vector3(chosenX, 0.16f, LaneZIndex);
 
                 obstacle.Initialize(spawnPosition, (obs) =>
                 {

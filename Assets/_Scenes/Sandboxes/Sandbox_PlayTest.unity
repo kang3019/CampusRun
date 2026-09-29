@@ -155,8 +155,8 @@ MonoBehaviour:
   _forwardViewDistance: 25
   _backwardCullDistance: 10
   _maxConsecutiveRoads: 3
-  _motorcycleMinZ: 20
-  _motorcycleSpawnChance: 0.25
+  _motorcycleMinZ: 8
+  _motorcycleSpawnChance: 0.35
 --- !u!4 &1141751676
 Transform:
   m_ObjectHideFlags: 0
@@ -632,6 +632,9 @@ MonoBehaviour:
   _cameraRotation: {x: 45, y: 0, z: 0}
   _forwardSmoothSpeed: 5
   _horizontalSmoothFactor: 0.3
+  _minScrollSpeed: 0.35
+  _deathBehindThreshold: 4.5
+  _enableAutoScroll: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
