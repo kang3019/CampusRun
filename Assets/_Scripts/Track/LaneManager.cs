@@ -35,12 +35,12 @@ namespace CampusRun.Track
         [SerializeField] private int _maxConsecutiveRoads = 3;
 
         [Header("--- 배달 오토바이 기믹 설정 ---")]
-        [Tooltip("오토바이 레인이 등장하기 시작하는 최소 Z 좌표 (기본 20 = 200m)")]
-        [SerializeField] private int _motorcycleMinZ = 20;
+        [Tooltip("오토바이 레인이 등장하기 시작하는 최소 Z 좌표 (기본 8 = 80m 맛보기 출현)")]
+        [SerializeField] private int _motorcycleMinZ = 8;
 
-        [Tooltip("200m 이후 도로 생성 시 오토바이 레인으로 대체될 확률 (0~1)")]
+        [Tooltip("최소 Z 좌표 이후 도로 생성 시 오토바이 레인으로 대체될 확률 (0~1)")]
         [Range(0f, 1f)]
-        [SerializeField] private float _motorcycleSpawnChance = 0.25f;
+        [SerializeField] private float _motorcycleSpawnChance = 0.35f;
 
         // 런타임 추적 변수
         private int _currentMaxSpawnedZ = -3;
