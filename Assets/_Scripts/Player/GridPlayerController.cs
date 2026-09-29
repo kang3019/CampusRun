@@ -3,6 +3,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using CampusRun.Core;
 using CampusRun.Obstacles;
+using CampusRun.Track;
 
 namespace CampusRun.Player
 {
@@ -65,7 +66,9 @@ namespace CampusRun.Player
         // 캐싱 변수
         private Vector3 _originalModelScale = Vector3.one;
         private Coroutine _hopCoroutine;
-        private readonly Collider[] _obstacleCheckHits = new Collider[4];
+        private Coroutine _drownCoroutine;
+        private FloatingPlank _currentMountedPlank;
+        private readonly Collider[] _obstacleCheckHits = new Collider[6];
 
         // 터치 및 스와이프 입력 감지 변수
         private Vector2 _touchStartPos;
@@ -225,6 +228,13 @@ namespace CampusRun.Player
                 return false;
             }
 
+            // 기존에 탑승 중이던 널판지에서 이탈
+            if (_currentMountedPlank != null)
+            {
+                _currentMountedPlank.UnmountPlayer(this);
+                _currentMountedPlank = null;
+            }
+
             // 이동 방향으로 캐릭터 회전 목표 계산
             Vector3 worldDirection = new Vector3(gridDirection.x, 0f, gridDirection.z);
             Quaternion startRot = transform.rotation;
@@ -249,6 +259,13 @@ namespace CampusRun.Player
             _currentGridZ = targetZ;
             _hasMovedAtLeastOnce = true;
             _idleTimer = 0f; // 이동 시 활동 타이머 리셋
+
+            // 기존에 타고 있던 널판지가 있다면 탑승 해제 (새로운 칸으로 도약)
+            if (_currentMountedPlank != null)
+            {
+                _currentMountedPlank.UnmountPlayer(this);
+                _currentMountedPlank = null;
+            }
 
             if (_isWarningTriggered)
             {
@@ -404,6 +421,102 @@ namespace CampusRun.Player
             }
 
             _isHopping = false;
+
+            // 착지점의 지형(물웅덩이/널판지) 검사
+            CheckLandingGround(targetPos);
+        }
+
+        /// <summary>
+        /// 착지한 칸의 바닥이 거대 물웅덩이인지, 떠다니는 널판지 위인지 판정합니다.
+        /// </summary>
+        private void CheckLandingGround(Vector3 landedPos)
+        {
+            if (!_isAlive) return;
+
+            Vector3 checkCenter = landedPos + Vector3.up * 0.25f;
+            int hitCount = Physics.OverlapSphereNonAlloc(checkCenter, 0.45f, _obstacleCheckHits);
+
+            FloatingPlank foundPlank = null;
+            bool isWaterGround = false;
+
+            for (int i = 0; i < hitCount; i++)
+            {
+                Collider hit = _obstacleCheckHits[i];
+                if (hit == null) continue;
+
+                FloatingPlank plank = hit.GetComponentInParent<FloatingPlank>();
+                if (plank != null)
+                {
+                    foundPlank = plank;
+                }
+
+                if (hit.GetComponentInParent<WaterLane>() != null)
+                {
+                    isWaterGround = true;
+                }
+            }
+
+            // 1. 널판지 위에 착지 성공 -> 탑승 및 표류 동기화
+            if (foundPlank != null)
+            {
+                _currentMountedPlank = foundPlank;
+                _currentMountedPlank.MountPlayer(this);
+                return;
+            }
+
+            // 2. 널판지가 없는데 거대 물웅덩이 레인에 떨어진 경우 -> 퐁당 익사 탈락
+            if (isWaterGround)
+            {
+                if (_drownCoroutine != null) StopCoroutine(_drownCoroutine);
+                _drownCoroutine = StartCoroutine(DrownRoutine());
+                Die("🌊 비 온 뒤 거대 물웅덩이에 빠져 지각 탈락했습니다!");
+            }
+        }
+
+        /// <summary>
+        /// 널판지가 이동할 때 플레이어도 동일한 이동량만큼 X축으로 부드럽게 표류(Drift)시킵니다.
+        /// </summary>
+        public void ApplyPlankDrift(float deltaX)
+        {
+            if (!_isAlive || _isHopping) return;
+
+            transform.position += new Vector3(deltaX, 0f, 0f);
+
+            // 화면 좌우 한계를 너무 많이 벗어나면 화면 밖 표류 탈락
+            float currentX = transform.position.x;
+            if (currentX < (_minGridX - 1.2f) * _gridSize || currentX > (_maxGridX + 1.2f) * _gridSize)
+            {
+                Die("🌊 널판지를 타고 화면 밖으로 떠내려가 지각 탈락했습니다!");
+                return;
+            }
+
+            // 현재 위치를 가장 가까운 그리드 정수로 동기화 (다음 점프 기준점)
+            _currentGridX = Mathf.RoundToInt(currentX / _gridSize);
+        }
+
+        private IEnumerator DrownRoutine()
+        {
+            float duration = 0.3f;
+            float elapsed = 0f;
+            Vector3 startPos = transform.position;
+            Vector3 sinkPos = startPos + Vector3.down * 0.45f;
+
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / duration);
+
+                // 물속으로 가라앉음
+                transform.position = Vector3.Lerp(startPos, sinkPos, t);
+
+                // 스케일 축소
+                if (_visualModelTransform != null)
+                {
+                    _visualModelTransform.localScale = Vector3.Lerp(_originalModelScale, Vector3.zero, t);
+                }
+
+                yield return null;
+            }
         }
 
         #endregion
@@ -441,6 +554,12 @@ namespace CampusRun.Player
             _isAlive = false;
             _isControlEnabled = false;
 
+            if (_currentMountedPlank != null)
+            {
+                _currentMountedPlank.UnmountPlayer(this);
+                _currentMountedPlank = null;
+            }
+
             if (_isWarningTriggered)
             {
                 _isWarningTriggered = false;
@@ -473,6 +592,13 @@ namespace CampusRun.Player
         private void ResetPlayer()
         {
             if (_hopCoroutine != null) StopCoroutine(_hopCoroutine);
+            if (_drownCoroutine != null) StopCoroutine(_drownCoroutine);
+
+            if (_currentMountedPlank != null)
+            {
+                _currentMountedPlank.UnmountPlayer(this);
+                _currentMountedPlank = null;
+            }
 
             _currentGridX = 0;
             _currentGridZ = 0;
