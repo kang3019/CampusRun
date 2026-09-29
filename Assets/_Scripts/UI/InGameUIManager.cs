@@ -82,6 +82,7 @@ namespace CampusRun.UI
             GameEvents.OnScoreChanged += UpdateScoreDisplay;
             GameEvents.OnPlayerDied += ShowGameOverPanel;
             GameEvents.OnInactivityWarning += HandleInactivityWarning;
+            GameEvents.OnInactivityTimerUpdated += HandleInactivityTimerUpdated;
         }
 
         private void OnDisable()
@@ -89,6 +90,7 @@ namespace CampusRun.UI
             GameEvents.OnScoreChanged -= UpdateScoreDisplay;
             GameEvents.OnPlayerDied -= ShowGameOverPanel;
             GameEvents.OnInactivityWarning -= HandleInactivityWarning;
+            GameEvents.OnInactivityTimerUpdated -= HandleInactivityTimerUpdated;
         }
 
         private void Start()
@@ -444,6 +446,21 @@ namespace CampusRun.UI
                     _warningBannerText.color = orange;
                 }
                 yield return new WaitForSeconds(0.25f);
+            }
+        }
+
+        /// <summary> 실시간 지각 위기 남은 시간 카운트다운 텍스트 갱신 </summary>
+        private void HandleInactivityTimerUpdated(float remainingSeconds, float progress)
+        {
+            if (_warningBannerText == null || !_warningBannerText.gameObject.activeSelf) return;
+
+            if (remainingSeconds <= 1.0f)
+            {
+                _warningBannerText.text = $"🚨 출석 마감 직전! ({remainingSeconds:0.0}초)";
+            }
+            else
+            {
+                _warningBannerText.text = $"⚠️ 지각 위기! 교수님이 다가옵니다! ({remainingSeconds:0.0}초)";
             }
         }
 

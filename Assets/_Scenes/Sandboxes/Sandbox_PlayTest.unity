@@ -878,12 +878,15 @@ MonoBehaviour:
   _safeLanePrefab: {fileID: 7883880905502760396, guid: b2b345ea7f213384195bfa01fe7d9fcd, type: 3}
   _roadLanePrefab: {fileID: 771072547989169011, guid: 37f4339c245f9ec45936bc471939d9e9, type: 3}
   _motorcycleLanePrefab: {fileID: 6000000000000001, guid: 8df10326afdf4433b404b4069584bcb2, type: 3}
+  _waterLanePrefab: {fileID: 7883880905502760396, guid: 4a9911e4f02a4b88950c4821a733ef02, type: 3}
   _initialSafeLaneCount: 6
   _forwardViewDistance: 25
   _backwardCullDistance: 10
   _maxConsecutiveRoads: 3
   _motorcycleMinZ: 8
   _motorcycleSpawnChance: 0.35
+  _waterLaneMinZ: 12
+  _waterLaneSpawnChance: 0.28
 --- !u!4 &1141751676
 Transform:
   m_ObjectHideFlags: 0
@@ -1035,8 +1038,8 @@ MonoBehaviour:
   _jumpStretchScale: {x: 0.8, y: 1.25, z: 0.8}
   _landSquashScale: {x: 1.25, y: 0.75, z: 1.25}
   _enableInactivityTimeout: 1
-  _inactivityTimeout: 4.5
-  _warningThreshold: 3
+  _inactivityTimeout: 6
+  _warningThreshold: 3.5
 --- !u!136 &1454545270
 CapsuleCollider:
   m_ObjectHideFlags: 0

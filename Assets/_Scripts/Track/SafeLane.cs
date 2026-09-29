@@ -34,6 +34,26 @@ namespace CampusRun.Track
         private readonly List<StationaryObstacle> _activeObstacles = new List<StationaryObstacle>();
         private readonly List<int> _availableXPositions = new List<int>();
 
+        // [핵심!] SafeLane의 Transform 스케일(20, 0.2, 1) 왜곡을 킥보드가 상속받지 않도록 독립 컨테이너 사용
+        private static Transform _obstacleRootContainer;
+
+        private static Transform GetOrCreateContainer()
+        {
+            if (_obstacleRootContainer == null)
+            {
+                GameObject container = GameObject.Find("[Obstacle_Pool_Container]");
+                if (container == null)
+                {
+                    container = new GameObject("[Obstacle_Pool_Container]");
+                    container.transform.position = Vector3.zero;
+                    container.transform.rotation = Quaternion.identity;
+                    container.transform.localScale = Vector3.one;
+                }
+                _obstacleRootContainer = container.transform;
+            }
+            return _obstacleRootContainer;
+        }
+
         // 연속 차단 방지를 위한 정적 직전 스폰 위치 추적
         private static int _lastSpawnedX = 999;
 
@@ -47,10 +67,12 @@ namespace CampusRun.Track
         {
             if (_obstaclePrefab == null) return;
 
+            Transform container = GetOrCreateContainer();
+
             _obstaclePool = new ObjectPool<StationaryObstacle>(
                 createFunc: () =>
                 {
-                    StationaryObstacle obstacle = Instantiate(_obstaclePrefab, transform);
+                    StationaryObstacle obstacle = Instantiate(_obstaclePrefab, container);
                     obstacle.gameObject.SetActive(false);
                     return obstacle;
                 },
@@ -94,58 +116,38 @@ namespace CampusRun.Track
 
         private void SpawnObstacles()
         {
-            // 통행 가능성(Pathability) 보장:
-            // 1. 후보 좌표 수집 (직전 레인에서 스폰된 X 좌표는 제외하여 일자 경로 차단 방지)
+            // [통행 가능성 100% 보장 규칙]
+            // 1. 레인 당 킥보드는 정확히 '최대 1개'만 배치 (7개 칸 중 6개 칸은 항상 100% 안전 통행로 보장)
+            // 2. 직전 레인과 동일한 X 좌표 및 직전 레인과 인접한 좌우 칸은 제외하여 전진/우회 경로 완벽 확보
             _availableXPositions.Clear();
             for (int x = _minGridX; x <= _maxGridX; x++)
             {
-                // 직전 레인과 동일한 X는 제외
+                // 직전 레인과 동일한 X는 제외 (직진 차단 방지)
                 if (x == _lastSpawnedX) continue;
+
+                // 좌우 벽 끝(-3, 3)과 직전 스폰이 결합되어 구석에 갇히는 막다른 골목(Dead End) 차단
+                if ((_lastSpawnedX == -3 && x == -2) || (_lastSpawnedX == 3 && x == 2)) continue;
+
                 _availableXPositions.Add(x);
             }
 
-            if (_availableXPositions.Count == 0) return;
+            if (_availableXPositions.Count == 0 || _maxObstaclesPerLane <= 0) return;
 
-            int targetSpawnCount = Mathf.Clamp(_maxObstaclesPerLane, 1, 2);
-            int previousChosenX = 999;
+            // 레인 당 정확히 1개만 스폰하여 절대 통로가 막히지 않도록 제한
+            int chosenIndex = Random.Range(0, _availableXPositions.Count);
+            int chosenX = _availableXPositions[chosenIndex];
+            _lastSpawnedX = chosenX;
 
-            for (int i = 0; i < targetSpawnCount; i++)
+            StationaryObstacle obstacle = _obstaclePool.Get();
+            Vector3 spawnPosition = new Vector3(chosenX, 0.16f, LaneZIndex);
+
+            obstacle.Initialize(spawnPosition, (obs) =>
             {
-                if (_availableXPositions.Count == 0) break;
-
-                // 후보 중 랜덤 선택하되, 2개 이상일 경우 최소 3칸 이상 떨어지도록 필터링
-                int chosenIndex = -1;
-                for (int attempt = 0; attempt < 10; attempt++)
+                if (gameObject.activeInHierarchy && _obstaclePool != null)
                 {
-                    int candidateIndex = Random.Range(0, _availableXPositions.Count);
-                    int candidateX = _availableXPositions[candidateIndex];
-
-                    // 첫 번째 장애물이거나 이전 선택과 3칸 이상 떨어져 벽을 만들지 않을 때
-                    if (previousChosenX == 999 || Mathf.Abs(candidateX - previousChosenX) >= 3)
-                    {
-                        chosenIndex = candidateIndex;
-                        break;
-                    }
+                    _obstaclePool.Release(obs);
                 }
-
-                if (chosenIndex == -1) break;
-
-                int chosenX = _availableXPositions[chosenIndex];
-                _availableXPositions.RemoveAt(chosenIndex);
-                previousChosenX = chosenX;
-                _lastSpawnedX = chosenX;
-
-                StationaryObstacle obstacle = _obstaclePool.Get();
-                Vector3 spawnPosition = new Vector3(chosenX, 0.16f, LaneZIndex);
-
-                obstacle.Initialize(spawnPosition, (obs) =>
-                {
-                    if (gameObject.activeInHierarchy && _obstaclePool != null)
-                    {
-                        _obstaclePool.Release(obs);
-                    }
-                });
-            }
+            });
         }
 
         protected override void OnLaneRecycled()
