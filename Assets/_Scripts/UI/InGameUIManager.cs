@@ -40,7 +40,7 @@ namespace CampusRun.UI
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void AutoInitializeInScene()
         {
-            if (FindFirstObjectByType<InGameUIManager>() == null)
+            if (FindAnyObjectByType<InGameUIManager>() == null)
             {
                 GameObject uiManagerObj = new GameObject("[InGameUIManager]");
                 uiManagerObj.AddComponent<InGameUIManager>();
@@ -100,7 +100,7 @@ namespace CampusRun.UI
         /// </summary>
         private void EnsureEventSystem()
         {
-            EventSystem es = FindFirstObjectByType<EventSystem>();
+            EventSystem es = FindAnyObjectByType<EventSystem>();
             if (es == null)
             {
                 GameObject eventSystemObj = new GameObject("EventSystem");
@@ -135,7 +135,7 @@ namespace CampusRun.UI
             }
 
             // 1. Canvas 생성 또는 탐색
-            Canvas canvas = FindFirstObjectByType<Canvas>();
+            Canvas canvas = FindAnyObjectByType<Canvas>();
             if (canvas == null)
             {
                 GameObject canvasObj = new GameObject("InGame_Canvas");

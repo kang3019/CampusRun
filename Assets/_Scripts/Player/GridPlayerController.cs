@@ -18,11 +18,11 @@ namespace CampusRun.Player
         [Tooltip("격자 1칸의 크기 (World Unit)")]
         [SerializeField] private float _gridSize = 1.0f;
 
-        [Tooltip("1칸 점프에 걸리는 시간(초)")]
-        [SerializeField] private float _hopDuration = 0.18f;
+        [Tooltip("1칸 점프에 걸리는 시간(초) - 날렵하고 쫀득한 반응성")]
+        [SerializeField] private float _hopDuration = 0.16f;
 
-        [Tooltip("점프 시 Y축 최고 정점 높이")]
-        [SerializeField] private float _jumpPeakHeight = 0.5f;
+        [Tooltip("점프 시 Y축 최고 정점 높이 - 과도한 붕 뜸 방지")]
+        [SerializeField] private float _jumpPeakHeight = 0.32f;
 
         [Tooltip("좌/우 이동 가능한 최소/최대 X 격자 한계")]
         [SerializeField] private int _minGridX = -4;
@@ -220,12 +220,12 @@ namespace CampusRun.Player
                 return false;
             }
 
-            // 이동 방향으로 캐릭터 회전
+            // 이동 방향으로 캐릭터 회전 목표 계산
             Vector3 worldDirection = new Vector3(gridDirection.x, 0f, gridDirection.z);
-            if (worldDirection != Vector3.zero)
-            {
-                transform.rotation = Quaternion.LookRotation(worldDirection, Vector3.up);
-            }
+            Quaternion startRot = transform.rotation;
+            Quaternion targetRot = (worldDirection != Vector3.zero)
+                ? Quaternion.LookRotation(worldDirection, Vector3.up)
+                : transform.rotation;
 
             // 목표 위치 계산
             Vector3 startPos = transform.position;
@@ -256,7 +256,7 @@ namespace CampusRun.Player
 
             // 점프 코루틴 실행
             if (_hopCoroutine != null) StopCoroutine(_hopCoroutine);
-            _hopCoroutine = StartCoroutine(HopRoutine(startPos, targetPos));
+            _hopCoroutine = StartCoroutine(HopRoutine(startPos, targetPos, startRot, targetRot));
 
             return true;
         }
@@ -313,7 +313,7 @@ namespace CampusRun.Player
             _isHopping = false;
         }
 
-        private IEnumerator HopRoutine(Vector3 startPos, Vector3 targetPos)
+        private IEnumerator HopRoutine(Vector3 startPos, Vector3 targetPos, Quaternion startRot, Quaternion targetRot)
         {
             _isHopping = true;
             float elapsed = 0f;
@@ -323,14 +323,19 @@ namespace CampusRun.Player
                 elapsed += Time.deltaTime;
                 float t = Mathf.Clamp01(elapsed / _hopDuration);
 
-                // 수평 위치 선형 보간
-                Vector3 currentHorizontal = Vector3.Lerp(startPos, targetPos, t);
+                // 1. 회전 보간: 점프 시작 직후 타겟 방향으로 부드럽고 신속하게 회전
+                float rotT = Mathf.Clamp01(t * 2.5f);
+                transform.rotation = Quaternion.Slerp(startRot, targetRot, rotT);
 
-                // Y축 포물선 계산 (Sin 곡선: 0 -> 1 -> 0)
+                // 2. 수평 위치: 부드러운 가감속(SmoothStep)으로 로봇 같은 등속 이동 방지
+                float smoothT = Mathf.SmoothStep(0f, 1f, t);
+                Vector3 currentHorizontal = Vector3.Lerp(startPos, targetPos, smoothT);
+
+                // 3. Y축 포물선 계산 (Sin 곡선: 0 -> 정점 -> 0)
                 float currentY = Mathf.Sin(t * Mathf.PI) * _jumpPeakHeight;
                 transform.position = new Vector3(currentHorizontal.x, currentY, currentHorizontal.z);
 
-                // 스쿼시 & 스트레치 애니메이션 보간
+                // 4. 모델 스쿼시/스트레치 및 전방 틸트(기울기) 연출
                 if (_visualModelTransform != null)
                 {
                     if (t < 0.5f)
@@ -340,18 +345,49 @@ namespace CampusRun.Player
                     }
                     else
                     {
-                        // 하강 및 착지 중: 원래 크기로 복귀
+                        // 하강 중: 기본 크기로 복귀
                         _visualModelTransform.localScale = Vector3.Lerp(_jumpStretchScale, _originalModelScale, (t - 0.5f) * 2f);
                     }
+
+                    // 점프 시 진행 방향으로 살짝 몸을 숙였다가(최대 12도) 착지 시 세움
+                    float tiltAngle = Mathf.Sin(t * Mathf.PI) * 12f;
+                    _visualModelTransform.localRotation = Quaternion.Euler(tiltAngle, 0f, 0f);
                 }
 
                 yield return null;
             }
 
-            // 착지 완료
+            // 착지 스냅
             transform.position = targetPos;
+            transform.rotation = targetRot;
+
+            // 5. [핵심] 착지 임팩트 젤리 바운스 (Landing Squash & Rebound)
             if (_visualModelTransform != null)
             {
+                _visualModelTransform.localRotation = Quaternion.identity;
+
+                // 1단계: 바닥에 닿는 순간 쿵! 찰떡처럼 바닥으로 눌림 (Squash, 0.04초)
+                float squashDuration = 0.04f;
+                float sqElapsed = 0f;
+                while (sqElapsed < squashDuration)
+                {
+                    sqElapsed += Time.deltaTime;
+                    float st = Mathf.Clamp01(sqElapsed / squashDuration);
+                    _visualModelTransform.localScale = Vector3.Lerp(_originalModelScale, _landSquashScale, st);
+                    yield return null;
+                }
+
+                // 2단계: 원래 크기로 뿅! 탄성 있게 복귀 (Rebound, 0.05초)
+                float bounceDuration = 0.05f;
+                float bElapsed = 0f;
+                while (bElapsed < bounceDuration)
+                {
+                    bElapsed += Time.deltaTime;
+                    float bt = Mathf.Clamp01(bElapsed / bounceDuration);
+                    _visualModelTransform.localScale = Vector3.Lerp(_landSquashScale, _originalModelScale, Mathf.SmoothStep(0f, 1f, bt));
+                    yield return null;
+                }
+
                 _visualModelTransform.localScale = _originalModelScale;
             }
 
@@ -393,6 +429,12 @@ namespace CampusRun.Player
                 StopCoroutine(_hopCoroutine);
             }
 
+            if (_visualModelTransform != null)
+            {
+                _visualModelTransform.localRotation = Quaternion.identity;
+                _visualModelTransform.localScale = _originalModelScale;
+            }
+
             // 사망 이벤트 발생 (앞으로 전진한 1칸당 1점과 동일하게 전달)
             GameEvents.TriggerPlayerDied(deathReason, _maxReachedGridZ);
             GameEvents.TriggerGameStateChanged(GameState.GameOver);
@@ -420,6 +462,7 @@ namespace CampusRun.Player
 
             if (_visualModelTransform != null)
             {
+                _visualModelTransform.localRotation = Quaternion.identity;
                 _visualModelTransform.localScale = _originalModelScale;
             }
         }

@@ -1,5 +1,6 @@
 using System.IO;
 using UnityEngine;
+using UnityEngine.UI;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using CampusRun.Player;
@@ -166,18 +167,17 @@ namespace CampusRun.EditorTools
             visual.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
 
             // 원본 메시 크기 기준: X(폭)=7.83, Y(높이)=3.44, Z(길이)=14.63
-            // 길건너 친구들(Crossy Road) 스타일의 이상적인 셔틀버스 비율 설정:
-            // 1) 차폭: 0.78m (도로 레인 1타일 폭 1.0m에 쏙 맞춤)
-            // 2) 높이: 0.92m (기존 0.33m 지네벌레 형태 탈피 -> 사람 키 1.0m와 비슷하게 듬직한 버스 높이)
-            // 3) 길이: 2.20m (2타일 정도를 커버하는 귀여운 미니 셔틀버스 길이)
+            // 길건너 친구들(Crossy Road) 스타일의 자연스러운 셔틀버스 황금 비율 설정:
+            // 1) 차폭: 0.80m (도로 레인 1칸 폭 1.0m에 쏙 맞춤)
+            // 2) 높이: 0.68m (과도하게 위로 솟아 찌그러진 왜곡 탈피, 안정적인 버스 차고)
+            // 3) 길이: 2.35m (기존 1.15m 깍두기 큐브 탈피 -> 약 2.4칸을 커버하는 시원하고 길쭉한 버스 실루엣)
             float rawWidth = 7.83f;
             float rawHeight = 3.44f;
             float rawLength = 14.63f;
 
-            // 캐릭터(약 0.7m x 0.7m x 0.9m)보다 조금 더 큰 앙증맞은 미니 셔틀버스 비율
-            float targetWidth = 0.78f;
-            float targetHeight = 0.85f;
-            float targetLength = 1.15f;
+            float targetWidth = 0.80f;
+            float targetHeight = 0.68f;
+            float targetLength = 2.35f;
 
             float scaleX = targetWidth / rawWidth;
             float scaleY = targetHeight / rawHeight;
@@ -247,16 +247,14 @@ namespace CampusRun.EditorTools
                 return;
             }
 
-            bool sceneWasLoaded = false;
             var activeScene = EditorSceneManager.GetActiveScene();
             if (activeScene.path != TestScenePath)
             {
-                activeScene = EditorSceneManager.OpenScene(TestScenePath, OpenSceneMode.Single);
-                sceneWasLoaded = true;
+                EditorSceneManager.OpenScene(TestScenePath, OpenSceneMode.Single);
             }
 
             // 플레이어 오브젝트 탐색
-            GridPlayerController playerCtrl = Object.FindFirstObjectByType<GridPlayerController>();
+            GridPlayerController playerCtrl = Object.FindAnyObjectByType<GridPlayerController>();
             if (playerCtrl == null)
             {
                 Debug.LogError("[CrossyRoadSetupTool] 씬에서 GridPlayerController를 찾을 수 없습니다.");
@@ -326,7 +324,7 @@ namespace CampusRun.EditorTools
             }
 
             // EventSystem 확인 및 생성
-            UnityEngine.EventSystems.EventSystem es = Object.FindFirstObjectByType<UnityEngine.EventSystems.EventSystem>();
+            UnityEngine.EventSystems.EventSystem es = Object.FindAnyObjectByType<UnityEngine.EventSystems.EventSystem>();
             if (es == null)
             {
                 GameObject esObj = new GameObject("EventSystem");
@@ -346,7 +344,7 @@ namespace CampusRun.EditorTools
             }
 
             // Canvas 확인 및 생성
-            Canvas canvas = Object.FindFirstObjectByType<Canvas>();
+            Canvas canvas = Object.FindAnyObjectByType<Canvas>();
             if (canvas == null)
             {
                 GameObject canvasObj = new GameObject("InGame_Canvas");
@@ -538,7 +536,7 @@ namespace CampusRun.EditorTools
             panelObj.SetActive(false);
 
             // InGameUIManager 확인 및 직렬화 바인딩
-            CampusRun.UI.InGameUIManager uiMgr = Object.FindFirstObjectByType<CampusRun.UI.InGameUIManager>();
+            CampusRun.UI.InGameUIManager uiMgr = Object.FindAnyObjectByType<CampusRun.UI.InGameUIManager>();
             if (uiMgr == null)
             {
                 GameObject uiObj = new GameObject("InGameUIManager");
