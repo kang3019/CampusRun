@@ -51,7 +51,7 @@ namespace CampusRun.Core
 
         #region 2. 플레이어 이동 및 생존 이벤트 (Player Domain)
 
-        /// <summary> 플레이어가 앞으로 1칸 전진(Hop)했을 때 발생합니다. (매개변수: 전진한 Z 좌표 / 누적 미터) </summary>
+        /// <summary> 플레이어가 앞으로 1칸 전진(Hop)했을 때 발생합니다. (매개변수: 도달한 그리드 Z 좌표) </summary>
         public static event Action<int> OnPlayerHopped;
 
         /// <summary> 플레이어의 이산 그리드 좌표가 변경되었을 때 발생합니다. (X, Y, Z) </summary>
@@ -63,7 +63,7 @@ namespace CampusRun.Core
         /// <summary> 제자리에 너무 오래 머물러 지각 위기일 때 시각 경고를 표시/해제합니다. (true: 경고 시작, false: 경고 해제) </summary>
         public static event Action<bool> OnInactivityWarning;
 
-        public static void TriggerPlayerHopped(int forwardDistance) => OnPlayerHopped?.Invoke(forwardDistance);
+        public static void TriggerPlayerHopped(int playerGridZ) => OnPlayerHopped?.Invoke(playerGridZ);
         public static void TriggerPlayerGridMoved(Vector3Int newGridPos) => OnPlayerGridMoved?.Invoke(newGridPos);
         public static void TriggerPlayerDied(string deathReason, int finalDistance) => OnPlayerDied?.Invoke(deathReason, finalDistance);
         public static void TriggerInactivityWarning(bool isWarning) => OnInactivityWarning?.Invoke(isWarning);

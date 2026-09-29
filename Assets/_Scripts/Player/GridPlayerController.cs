@@ -277,8 +277,8 @@ namespace CampusRun.Player
             if (_currentGridZ > _maxReachedGridZ)
             {
                 _maxReachedGridZ = _currentGridZ;
-                GameEvents.TriggerPlayerHopped(_maxReachedGridZ * 10);
-                GameEvents.TriggerScoreChanged(_maxReachedGridZ * 10); // 앞으로 전진 1칸당 10m
+                GameEvents.TriggerPlayerHopped(_maxReachedGridZ); // 레인 생성을 위한 그리드 Z 좌표 전달
+                GameEvents.TriggerScoreChanged(_maxReachedGridZ * 10); // UI 표시를 위한 거리 단위(1칸당 10m)
             }
 
             GameEvents.TriggerPlayerGridMoved(new Vector3Int(_currentGridX, 0, _currentGridZ));
