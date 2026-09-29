@@ -13,8 +13,11 @@ namespace CampusRun.Track
     public class RoadLane : BaseLane
     {
         [Header("--- 차량 스폰 설정 ---")]
-        [Tooltip("스폰할 차량 프리팹 (MovingVehicle 컴포넌트 필수)")]
+        [Tooltip("스폰할 단일 기본 차량 프리팹 (하위 호환)")]
         [SerializeField] private MovingVehicle _vehiclePrefab;
+
+        [Tooltip("도로에 등장할 수 있는 다양한 차량 프리팹 목록 (셔틀버스, 승용차, 택시, 트럭 등)")]
+        [SerializeField] private MovingVehicle[] _vehiclePrefabs;
 
         [Tooltip("차량 이동 방향 (+1: 왼쪽->오른쪽, -1: 오른쪽->왼쪽, 0: 랜덤)")]
         [SerializeField] private float _fixedDirection = 0f;
@@ -33,11 +36,22 @@ namespace CampusRun.Track
         // 런타임 상태 변수
         private float _currentDirection = 1f;
         private float _currentSpeed = 4.2f;
+        private float _currentMinClearWindow = 4.2f;
+        private float _currentMaxClearWindow = 6.8f;
+        private MovingVehicle _currentLaneVehiclePrefab;
         private Coroutine _spawnRoutine;
 
-        // 차량 오브젝트 풀
-        private IObjectPool<MovingVehicle> _vehiclePool;
-        private readonly List<MovingVehicle> _activeVehicles = new List<MovingVehicle>();
+        private struct ActiveVehicleInfo
+        {
+            public MovingVehicle Vehicle;
+            public IObjectPool<MovingVehicle> Pool;
+        }
+
+        private readonly List<ActiveVehicleInfo> _activeVehicles = new List<ActiveVehicleInfo>();
+
+        // [핵심!] 차종별 전역 공유 오브젝트 풀 (풀 중복 생성 방지 및 메모리 최적화)
+        private static readonly Dictionary<MovingVehicle, IObjectPool<MovingVehicle>> _sharedVehiclePools
+            = new Dictionary<MovingVehicle, IObjectPool<MovingVehicle>>();
 
         // [핵심!] RoadLane의 Transform 스케일 (20, 0.2, 1) 왜곡을 차량이 상속받지 않도록 독립 컨테이너 사용
         private static Transform _vehicleRootContainer;
@@ -59,43 +73,36 @@ namespace CampusRun.Track
             return _vehicleRootContainer;
         }
 
+        private static IObjectPool<MovingVehicle> GetOrCreatePool(MovingVehicle prefab)
+        {
+            if (prefab == null) return null;
+
+            if (!_sharedVehiclePools.TryGetValue(prefab, out IObjectPool<MovingVehicle> pool))
+            {
+                Transform container = GetOrCreateContainer();
+                pool = new ObjectPool<MovingVehicle>(
+                    createFunc: () =>
+                    {
+                        MovingVehicle vehicle = Instantiate(prefab, container);
+                        vehicle.gameObject.SetActive(false);
+                        return vehicle;
+                    },
+                    actionOnGet: (vehicle) => { },
+                    actionOnRelease: (vehicle) => vehicle.gameObject.SetActive(false),
+                    actionOnDestroy: (vehicle) => { if (vehicle != null) Destroy(vehicle.gameObject); },
+                    collectionCheck: true,
+                    defaultCapacity: 3,
+                    maxSize: 10
+                );
+                _sharedVehiclePools[prefab] = pool;
+            }
+
+            return pool;
+        }
+
         private void Awake()
         {
             _isSafeLane = false;
-            InitializePool();
-        }
-
-        private void InitializePool()
-        {
-            if (_vehiclePrefab == null) return;
-
-            Transform container = GetOrCreateContainer();
-
-            _vehiclePool = new ObjectPool<MovingVehicle>(
-                createFunc: () =>
-                {
-                    // RoadLane(스케일 20, 0.2, 1)의 자식이 아닌 스케일 (1,1,1)인 독립 컨테이너 아래 생성
-                    MovingVehicle vehicle = Instantiate(_vehiclePrefab, container);
-                    vehicle.gameObject.SetActive(false);
-                    return vehicle;
-                },
-                actionOnGet: (vehicle) =>
-                {
-                    _activeVehicles.Add(vehicle);
-                },
-                actionOnRelease: (vehicle) =>
-                {
-                    _activeVehicles.Remove(vehicle);
-                    vehicle.gameObject.SetActive(false);
-                },
-                actionOnDestroy: (vehicle) =>
-                {
-                    if (vehicle != null) Destroy(vehicle.gameObject);
-                },
-                collectionCheck: true,
-                defaultCapacity: 3,
-                maxSize: 6
-            );
         }
 
         /// <summary>
@@ -110,7 +117,7 @@ namespace CampusRun.Track
         {
             base.OnLaneSpawned();
 
-            // 레인마다 방향과 속도를 랜덤 또는 고정 설정
+            // 1. 방향 결정
             if (_fixedDirection == 0f)
             {
                 _currentDirection = (Random.value > 0.5f) ? 1f : -1f;
@@ -120,17 +127,70 @@ namespace CampusRun.Track
                 _currentDirection = Mathf.Sign(_fixedDirection);
             }
 
-            _currentSpeed = Random.Range(_minSpeed, _maxSpeed);
+            // 2. 이 레인에서 달릴 차량 프리팹 선택 (다양한 차종 중 랜덤)
+            SelectLaneVehicle();
 
-            // 풀이 아직 생성되지 않았다면 안전하게 초기화
-            if (_vehiclePool == null)
-            {
-                InitializePool();
-            }
+            // 3. 차종에 맞는 고유 속도 및 안전 통과 시간(Clear Window) 배정
+            TuneVehicleSpeedAndWindow();
 
-            // 차량 스폰 루틴 시작
+            // 4. 차량 스폰 루틴 시작
             if (_spawnRoutine != null) StopCoroutine(_spawnRoutine);
             _spawnRoutine = StartCoroutine(VehicleSpawnRoutine());
+        }
+
+        private void SelectLaneVehicle()
+        {
+            if (_vehiclePrefabs != null && _vehiclePrefabs.Length > 0)
+            {
+                int randomIndex = Random.Range(0, _vehiclePrefabs.Length);
+                _currentLaneVehiclePrefab = _vehiclePrefabs[randomIndex];
+            }
+            else
+            {
+                _currentLaneVehiclePrefab = _vehiclePrefab;
+            }
+        }
+
+        private void TuneVehicleSpeedAndWindow()
+        {
+            if (_currentLaneVehiclePrefab == null)
+            {
+                _currentSpeed = Random.Range(_minSpeed, _maxSpeed);
+                _currentMinClearWindow = _minClearWindow;
+                _currentMaxClearWindow = _maxClearWindow;
+                return;
+            }
+
+            string prefabName = _currentLaneVehiclePrefab.name;
+
+            if (prefabName.Contains("Taxi"))
+            {
+                // 캠퍼스 총알 택시: 1교시 지각생을 태우고 쏜살같이 질주 (속도 11.0~13.5m/s, 창문 3.5~5.0s)
+                _currentSpeed = Random.Range(11.0f, 13.5f);
+                _currentMinClearWindow = 3.5f;
+                _currentMaxClearWindow = 5.0f;
+            }
+            else if (prefabName.Contains("Truck"))
+            {
+                // 택배/생협 1톤 탑차: 묵직하고 느긋하게 주행 (속도 6.8~8.8m/s, 창문 4.2~6.0s)
+                _currentSpeed = Random.Range(6.8f, 8.8f);
+                _currentMinClearWindow = 4.2f;
+                _currentMaxClearWindow = 6.0f;
+            }
+            else if (prefabName.Contains("Sedan") || prefabName.Contains("Car"))
+            {
+                // 학생/교직원 세단 승용차: 경쾌하고 표준적인 주행 (속도 8.8~11.2m/s, 창문 3.8~5.5s)
+                _currentSpeed = Random.Range(8.8f, 11.2f);
+                _currentMinClearWindow = 3.8f;
+                _currentMaxClearWindow = 5.5f;
+            }
+            else
+            {
+                // 대형 셔틀버스: 차체가 길고 묵직함 (속도 7.5~9.5m/s, 창문 4.5~6.5s)
+                _currentSpeed = Random.Range(_minSpeed, _maxSpeed);
+                _currentMinClearWindow = _minClearWindow;
+                _currentMaxClearWindow = _maxClearWindow;
+            }
         }
 
         protected override void OnLaneRecycled()
@@ -143,12 +203,13 @@ namespace CampusRun.Track
                 _spawnRoutine = null;
             }
 
-            // 활성화되어 있던 모든 차량 회수
+            // 활성화되어 있던 모든 차량을 원래의 풀로 안전하게 회수
             for (int i = _activeVehicles.Count - 1; i >= 0; i--)
             {
-                if (_activeVehicles[i] != null && _vehiclePool != null)
+                ActiveVehicleInfo info = _activeVehicles[i];
+                if (info.Vehicle != null && info.Pool != null)
                 {
-                    _vehiclePool.Release(_activeVehicles[i]);
+                    info.Pool.Release(info.Vehicle);
                 }
             }
             _activeVehicles.Clear();
@@ -163,23 +224,32 @@ namespace CampusRun.Track
 
             while (true)
             {
-                // [단독 객체 반복 스폰] 각각의 차량 1대가 정해진 궤적을 지나감
+                // 각각의 차량 1대가 정해진 궤적을 지나감
                 SpawnVehicle();
 
-                // [확실한 안전 통과 시간(Clear Window)]
-                // 차량 1대가 통과한 후, 다음 차량이 스폰되기까지 5.0초 ~ 7.5초 동안 도로가 텅 비어 있어 안심하고 건널 수 있음
-                float clearWindow = Random.Range(_minClearWindow, _maxClearWindow);
+                // 차종별 맞춤형 안전 통과 시간(Clear Window) 대기
+                float clearWindow = Random.Range(_currentMinClearWindow, _currentMaxClearWindow);
                 yield return new WaitForSeconds(clearWindow);
             }
         }
 
         private void SpawnVehicle()
         {
-            if (_vehiclePrefab == null || _vehiclePool == null) return;
+            if (_currentLaneVehiclePrefab == null) return;
 
-            MovingVehicle vehicle = _vehiclePool.Get();
+            IObjectPool<MovingVehicle> pool = GetOrCreatePool(_currentLaneVehiclePrefab);
+            if (pool == null) return;
 
-            // 스폰 위치 계산 (진행 방향의 반대쪽 끝 X=±13m 에서 출발, 도로 위 Y=0.1f 착지)
+            MovingVehicle vehicle = pool.Get();
+
+            ActiveVehicleInfo info = new ActiveVehicleInfo
+            {
+                Vehicle = vehicle,
+                Pool = pool
+            };
+            _activeVehicles.Add(info);
+
+            // 스폰 위치 계산 (진행 방향의 반대쪽 끝 X=±14.5m 에서 출발, 도로 위 Y=0.1f 착지)
             float startX = (_currentDirection > 0) ? -_spawnBoundaryX : _spawnBoundaryX;
             vehicle.transform.position = new Vector3(startX, 0.1f, LaneZIndex);
             vehicle.transform.localScale = Vector3.one;
@@ -187,10 +257,16 @@ namespace CampusRun.Track
             // 차량 초기화 (반대편 끝 도착 시 풀 반환 콜백 연결)
             vehicle.Initialize(_currentDirection, _currentSpeed, (v) =>
             {
-                if (_vehiclePool != null)
+                for (int i = _activeVehicles.Count - 1; i >= 0; i--)
                 {
-                    _vehiclePool.Release(v);
+                    if (_activeVehicles[i].Vehicle == v)
+                    {
+                        _activeVehicles.RemoveAt(i);
+                        break;
+                    }
                 }
+
+                pool.Release(v);
             });
         }
     }

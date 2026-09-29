@@ -129,6 +129,11 @@ MonoBehaviour:
   _laneWidth: 20
   _isSafeLane: 0
   _vehiclePrefab: {fileID: 4162595725970135995, guid: bad1d88431890184aa22917208879c97, type: 3}
+  _vehiclePrefabs:
+  - {fileID: 4162595725970135995, guid: bad1d88431890184aa22917208879c97, type: 3}
+  - {fileID: 6000000000000001, guid: 4a9911e4f02a4b88950c4821a733ef10, type: 3}
+  - {fileID: 6000000000000001, guid: 4a9911e4f02a4b88950c4821a733ef11, type: 3}
+  - {fileID: 6000000000000001, guid: 4a9911e4f02a4b88950c4821a733ef12, type: 3}
   _fixedDirection: 0
   _minSpeed: 7.5
   _maxSpeed: 10.5
