@@ -66,16 +66,31 @@ namespace CampusRun.Player
 
         private void OnEnable()
         {
+            GameEvents.OnPlayerHopped += HandlePlayerHopped;
             GameEvents.OnGameRestarted += HandleGameRestarted;
         }
 
         private void OnDisable()
         {
+            GameEvents.OnPlayerHopped -= HandlePlayerHopped;
             GameEvents.OnGameRestarted -= HandleGameRestarted;
+        }
+
+        private void HandlePlayerHopped(int playerZ)
+        {
+            if (!_hasGameStarted)
+            {
+                _hasGameStarted = true;
+                if (_target != null)
+                {
+                    _currentBaseZ = _target.position.z;
+                }
+            }
         }
 
         private void HandleGameRestarted()
         {
+            _hasGameStarted = false;
             FindTargetIfNull();
             if (_target != null)
             {
@@ -138,40 +153,6 @@ namespace CampusRun.Player
             FindTargetIfNull();
         }
 
-        private void OnEnable()
-        {
-            CampusRun.Core.GameEvents.OnPlayerHopped += HandlePlayerHopped;
-            CampusRun.Core.GameEvents.OnGameRestarted += HandleGameRestarted;
-        }
-
-        private void OnDisable()
-        {
-            CampusRun.Core.GameEvents.OnPlayerHopped -= HandlePlayerHopped;
-            CampusRun.Core.GameEvents.OnGameRestarted -= HandleGameRestarted;
-        }
-
-        private void HandlePlayerHopped(int playerZ)
-        {
-            // 플레이어가 첫 점프를 시작하면 자동 스크롤 활성화
-            if (!_hasGameStarted)
-            {
-                _hasGameStarted = true;
-                if (_target != null)
-                {
-                    _currentBaseZ = _target.position.z;
-                }
-            }
-        }
-
-        private void HandleGameRestarted()
-        {
-            _hasGameStarted = false;
-            SnapToTarget();
-            if (_target != null)
-            {
-                _currentBaseZ = _target.position.z;
-            }
-        }
 
         private void Start()
         {
