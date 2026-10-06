@@ -129,8 +129,11 @@ MonoBehaviour:
   _laneWidth: 20
   _isSafeLane: 0
   _obstaclePrefab: {fileID: 6000000000000001, guid: 0ef8cdf53f764cab89e06609d1a6e1d8, type: 3}
-  _obstacleSpawnChance: 0.35
+  _obstaclePrefabs:
+  - {fileID: 6000000000000001, guid: 0ef8cdf53f764cab89e06609d1a6e1d8, type: 3}
+  - {fileID: 6000000000000001, guid: a483b27b87c14f3da3b4693a21ef429b, type: 3}
+  _obstacleSpawnChance: 0.7
   _maxObstaclesPerLane: 1
   _minGridX: -3
   _maxGridX: 3
-  _safeStartZoneZ: 6
+  _safeStartZoneZ: 2
