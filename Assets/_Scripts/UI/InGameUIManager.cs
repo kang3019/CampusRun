@@ -58,6 +58,7 @@ namespace CampusRun.UI
         {
             EnsureEventSystem();
             EnsureHUDAndGameOverUI();
+            SetupScoreHUDPosition();
             ApplyFixedScale();
 
             if (_gameOverPanel != null)
@@ -167,17 +168,17 @@ namespace CampusRun.UI
                 canvasObj.AddComponent<GraphicRaycaster>();
             }
 
-            // 2. 화면 좌측 상단 실시간 점수 HUD 생성
+            // 2. 화면 우측 상단 실시간 점수(거리) HUD 생성
             if (_scoreText == null)
             {
                 GameObject scoreObj = new GameObject("Score_HUD_Text");
                 scoreObj.transform.SetParent(canvas.transform, false);
 
                 RectTransform rect = scoreObj.AddComponent<RectTransform>();
-                rect.anchorMin = new Vector2(0f, 1f); // 좌상단
-                rect.anchorMax = new Vector2(0f, 1f);
-                rect.pivot = new Vector2(0f, 1f);
-                rect.anchoredPosition = new Vector2(60f, -50f);
+                rect.anchorMin = new Vector2(1f, 1f); // 우상단
+                rect.anchorMax = new Vector2(1f, 1f);
+                rect.pivot = new Vector2(1f, 1f);
+                rect.anchoredPosition = new Vector2(-60f, -50f);
                 rect.sizeDelta = new Vector2(400f, 120f);
 
                 _scoreText = scoreObj.AddComponent<Text>();
@@ -185,8 +186,8 @@ namespace CampusRun.UI
                 _scoreText.fontSize = 76;
                 _scoreText.fontStyle = FontStyle.Bold;
                 _scoreText.color = Color.white;
-                _scoreText.alignment = TextAnchor.UpperLeft;
-                _scoreText.text = "0m";
+                _scoreText.alignment = TextAnchor.UpperRight;
+                _scoreText.text = "0 m";
 
                 // 또렷한 검은색 그림자
                 Shadow shadow = scoreObj.AddComponent<Shadow>();
@@ -365,6 +366,21 @@ namespace CampusRun.UI
         }
 
         /// <summary>
+        /// 점수(거리) HUD의 앵커 및 위치를 화면 우측 상단으로 안전하게 정렬합니다.
+        /// </summary>
+        public void SetupScoreHUDPosition()
+        {
+            if (_scoreText == null) return;
+
+            RectTransform rect = _scoreText.rectTransform;
+            rect.anchorMin = new Vector2(1f, 1f); // 우상단
+            rect.anchorMax = new Vector2(1f, 1f);
+            rect.pivot = new Vector2(1f, 1f);
+            rect.anchoredPosition = new Vector2(-60f, -50f);
+            _scoreText.alignment = TextAnchor.UpperRight;
+        }
+
+        /// <summary>
         /// 점수 HUD, 게임오버 대화상자 박스, 다시하기 버튼의 스케일을 0.9로 정밀하게 고정합니다.
         /// </summary>
         public void ApplyFixedScale()
@@ -402,7 +418,7 @@ namespace CampusRun.UI
             _currentScore = score;
             if (_scoreText != null)
             {
-                _scoreText.text = $"{score}m";
+                _scoreText.text = $"{score} m";
             }
         }
 

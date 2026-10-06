@@ -33,6 +33,17 @@ namespace CampusRun.Track
         [Tooltip("스폰 시작 X축 좌표 (도로 폭 20m 기준 ±14.5m)")]
         [SerializeField] private float _spawnBoundaryX = 14.5f;
 
+        [Header("--- 횡단보도 및 도로 표식 설정 ---")]
+        [Tooltip("횡단보도 장식 그룹 (지브라 스트라이프 + 정지선)")]
+        [SerializeField] private GameObject _crosswalkGroup;
+
+        [Tooltip("일반 도로 점선 차선 그룹")]
+        [SerializeField] private GameObject _standardDashesGroup;
+
+        [Tooltip("이 도로에 횡단보도가 등장할 확률 (기본 0.3 = 30% 확률)")]
+        [Range(0f, 1f)]
+        [SerializeField] private float _crosswalkChance = 0.3f;
+
         // 런타임 상태 변수
         private float _currentDirection = 1f;
         private float _currentSpeed = 4.2f;
@@ -88,7 +99,7 @@ namespace CampusRun.Track
                         return vehicle;
                     },
                     actionOnGet: (vehicle) => { },
-                    actionOnRelease: (vehicle) => vehicle.gameObject.SetActive(false),
+                    actionOnRelease: (vehicle) => { if (vehicle != null) vehicle.gameObject.SetActive(false); },
                     actionOnDestroy: (vehicle) => { if (vehicle != null) Destroy(vehicle.gameObject); },
                     collectionCheck: true,
                     defaultCapacity: 3,
@@ -103,6 +114,22 @@ namespace CampusRun.Track
         private void Awake()
         {
             _isSafeLane = false;
+        }
+
+        private void OnEnable()
+        {
+            CampusRun.Core.GameEvents.OnGameRestarted += HandleGameRestarted;
+        }
+
+        private void OnDisable()
+        {
+            CampusRun.Core.GameEvents.OnGameRestarted -= HandleGameRestarted;
+        }
+
+        private static void HandleGameRestarted()
+        {
+            _sharedVehiclePools.Clear();
+            _vehicleRootContainer = null;
         }
 
         /// <summary>
@@ -126,6 +153,11 @@ namespace CampusRun.Track
             {
                 _currentDirection = Mathf.Sign(_fixedDirection);
             }
+
+            // 1-1. 횡단보도 확률 표시 (약 30% 확률로 횡단보도 활성화, 70%는 일반 도로 차선)
+            bool isCrosswalk = Random.value < _crosswalkChance;
+            if (_crosswalkGroup != null) _crosswalkGroup.SetActive(isCrosswalk);
+            if (_standardDashesGroup != null) _standardDashesGroup.SetActive(!isCrosswalk);
 
             // 2. 이 레인에서 달릴 차량 프리팹 선택 (다양한 차종 중 랜덤)
             SelectLaneVehicle();
@@ -241,6 +273,7 @@ namespace CampusRun.Track
             if (pool == null) return;
 
             MovingVehicle vehicle = pool.Get();
+            if (vehicle == null) return;
 
             ActiveVehicleInfo info = new ActiveVehicleInfo
             {

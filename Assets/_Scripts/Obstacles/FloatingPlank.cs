@@ -91,7 +91,7 @@ namespace CampusRun.Obstacles
                 // 플레이어가 타고 있는 채로 화면 밖으로 나가면 화면 밖 표류 탈락
                 if (_mountedPlayer.IsAlive)
                 {
-                    _mountedPlayer.Die("🌊 널판지를 타고 화면 밖으로 떠내려가 지각 탈락했습니다!");
+                    _mountedPlayer.Die("🚧 공사 안전 발판을 타고 공사장 밖으로 밀려나 1교시 지각했습니다!");
                 }
                 _mountedPlayer = null;
             }
