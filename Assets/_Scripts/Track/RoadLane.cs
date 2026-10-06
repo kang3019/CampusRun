@@ -154,9 +154,16 @@ namespace CampusRun.Track
                 _currentDirection = Mathf.Sign(_fixedDirection);
             }
 
-            // 1-1. 횡단보도 확률 표시 (약 30% 확률로 횡단보도 활성화, 70%는 일반 도로 차선)
+            // 1-1. 횡단보도 확률 표시 (횡단보도 활성화 시 다양한 위치와 방향으로 스폰)
             bool isCrosswalk = Random.value < _crosswalkChance;
-            if (_crosswalkGroup != null) _crosswalkGroup.SetActive(isCrosswalk);
+            if (_crosswalkGroup != null)
+            {
+                _crosswalkGroup.SetActive(isCrosswalk);
+                if (isCrosswalk)
+                {
+                    RandomizeCrosswalkVariation();
+                }
+            }
             if (_standardDashesGroup != null) _standardDashesGroup.SetActive(!isCrosswalk);
 
             // 2. 이 레인에서 달릴 차량 프리팹 선택 (다양한 차종 중 랜덤)
@@ -168,6 +175,31 @@ namespace CampusRun.Track
             // 4. 차량 스폰 루틴 시작
             if (_spawnRoutine != null) StopCoroutine(_spawnRoutine);
             _spawnRoutine = StartCoroutine(VehicleSpawnRoutine());
+        }
+
+        /// <summary>
+        /// 횡단보도가 스폰될 때 위치(X축 오프셋)와 방향/스타일 변형을 다양화합니다.
+        /// </summary>
+        private void RandomizeCrosswalkVariation()
+        {
+            if (_crosswalkGroup == null) return;
+
+            // 1. 위치(X축 좌/우/중앙) 다양화: 중앙, 약간 좌측, 약간 우측, 좌측 끝, 우측 끝
+            float[] possibleOffsetsX = new float[] { 0f, -2.0f, 2.0f, -3.5f, 3.5f };
+            float chosenOffsetX = possibleOffsetsX[Random.Range(0, possibleOffsetsX.Length)];
+            float invX = 1f / 20f;
+            _crosswalkGroup.transform.localPosition = new Vector3(chosenOffsetX * invX, 0f, 0f);
+
+            // 2. 여러 방향/스타일 변형(정방향, 좌사선, 우사선, 듀얼 통로) 중 1개 선택 활성화
+            int childCount = _crosswalkGroup.transform.childCount;
+            if (childCount > 0)
+            {
+                int chosenStyleIndex = Random.Range(0, childCount);
+                for (int i = 0; i < childCount; i++)
+                {
+                    _crosswalkGroup.transform.GetChild(i).gameObject.SetActive(i == chosenStyleIndex);
+                }
+            }
         }
 
         private void SelectLaneVehicle()

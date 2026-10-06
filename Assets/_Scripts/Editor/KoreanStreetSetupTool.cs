@@ -32,7 +32,7 @@ namespace CampusRun.EditorTools
         private const string MatScaffoldDarkPath = MaterialsDir + "/M_Scaffold_Dark.mat";
         private const string MatSafetyYellowPath = MaterialsDir + "/M_Safety_Yellow.mat";
 
-        private const string PrefsKey = "CampusRun_KoreanStreetSetup_Executed_v8";
+        private const string PrefsKey = "CampusRun_KoreanStreetSetup_Executed_v9";
 
         // 프리팹 경로
         private const string SafeLanePrefabPath = PrefabsEnvDir + "/PF_SafeLane.prefab";
@@ -307,35 +307,107 @@ namespace CampusRun.EditorTools
             GameObject crosswalkGroup = new GameObject("CrosswalkGroup");
             crosswalkGroup.transform.SetParent(roadRoot.transform, false);
 
-            // [사용자 요청] 플레이어 전진(윗방향키, +Z 전방) 진행 방향에 맞춘 가로 줄무늬 횡단보도
-            // 보행자가 앞으로 건너갈 때 밟고 지나갈 수 있도록 Z축 방향으로 4줄의 굵은 가로 스트라이프 배치
-            float[] crosswalkZ = new float[] { -0.30f, -0.10f, 0.10f, 0.30f };
+            // [사용자 요청]
+            // 1. 횡단보도 줄이 많이 얇고 여러 줄로 구성 (기존 4줄 0.14m -> 8줄 0.045m)
+            // 2. 좌우 일자 정지선(StopLine) 제거
+            // 3. 다양한 방향/스타일 변형(정방향, 좌사선, 우사선, 듀얼 통로, 광폭)을 하위 자식 그룹으로 구축
+            float[] crosswalkZ = new float[] { -0.315f, -0.225f, -0.135f, -0.045f, 0.045f, 0.135f, 0.225f, 0.315f };
+            float stripeThickness = 0.045f;
+            float stripeHeight = 0.035f * invY;
+
+            // --- 변형 1: 정방향 기본 수평 스트라이프 8줄 ---
+            GameObject varStraight = new GameObject("Variant_Straight");
+            varStraight.transform.SetParent(crosswalkGroup.transform, false);
             for (int idx = 0; idx < crosswalkZ.Length; idx++)
             {
                 float wz = crosswalkZ[idx];
                 GameObject stripe = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                stripe.name = $"Zebra_Horizontal_{idx + 1}";
-                stripe.transform.SetParent(crosswalkGroup.transform, false);
+                stripe.name = $"Stripe_{idx + 1}";
+                stripe.transform.SetParent(varStraight.transform, false);
                 Object.DestroyImmediate(stripe.GetComponent<Collider>());
                 stripe.GetComponent<MeshRenderer>().sharedMaterial = matCrosswalk;
-
                 stripe.transform.localPosition = new Vector3(0f, 0.52f, wz);
-                stripe.transform.localScale = new Vector3(3.6f * invX, 0.04f * invY, 0.14f);
+                stripe.transform.localScale = new Vector3(3.6f * invX, stripeHeight, stripeThickness);
             }
 
-            // 차량 정지선 (차량이 달리는 X축 좌우 방향에서 횡단보도 앞 정지 위치 표시)
-            float[] stopLineX = new float[] { -2.3f, 2.3f };
-            foreach (float sx in stopLineX)
+            // --- 변형 2: 좌사선 대각선 스트라이프 8줄 ---
+            // (부모 스케일 20:0.2:1 왜곡을 방지하기 위해 Z위치에 따라 X좌표를 점진 오프셋)
+            GameObject varDiagLeft = new GameObject("Variant_Diagonal_Left");
+            varDiagLeft.transform.SetParent(crosswalkGroup.transform, false);
+            for (int idx = 0; idx < crosswalkZ.Length; idx++)
             {
-                GameObject stopLine = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                stopLine.name = $"StopLine_{sx:F1}";
-                stopLine.transform.SetParent(crosswalkGroup.transform, false);
-                Object.DestroyImmediate(stopLine.GetComponent<Collider>());
-                stopLine.GetComponent<MeshRenderer>().sharedMaterial = matCrosswalk;
-
-                stopLine.transform.localPosition = new Vector3(sx * invX, 0.525f, 0f);
-                stopLine.transform.localScale = new Vector3(0.28f * invX, 0.045f * invY, 0.90f);
+                float wz = crosswalkZ[idx];
+                float norm = (float)idx / (crosswalkZ.Length - 1) - 0.5f; // -0.5 ~ +0.5
+                float shiftX = -norm * 1.5f; // 앞(+Z)으로 갈수록 왼쪽(-X)으로 이동
+                GameObject stripe = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                stripe.name = $"Stripe_DiagL_{idx + 1}";
+                stripe.transform.SetParent(varDiagLeft.transform, false);
+                Object.DestroyImmediate(stripe.GetComponent<Collider>());
+                stripe.GetComponent<MeshRenderer>().sharedMaterial = matCrosswalk;
+                stripe.transform.localPosition = new Vector3(shiftX * invX, 0.52f, wz);
+                stripe.transform.localScale = new Vector3(3.2f * invX, stripeHeight, stripeThickness);
             }
+            varDiagLeft.SetActive(false); // 런타임에 RoadLane에서 랜덤 활성화
+
+            // --- 변형 3: 우사선 대각선 스트라이프 8줄 ---
+            GameObject varDiagRight = new GameObject("Variant_Diagonal_Right");
+            varDiagRight.transform.SetParent(crosswalkGroup.transform, false);
+            for (int idx = 0; idx < crosswalkZ.Length; idx++)
+            {
+                float wz = crosswalkZ[idx];
+                float norm = (float)idx / (crosswalkZ.Length - 1) - 0.5f; // -0.5 ~ +0.5
+                float shiftX = norm * 1.5f; // 앞(+Z)으로 갈수록 오른쪽(+X)으로 이동
+                GameObject stripe = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                stripe.name = $"Stripe_DiagR_{idx + 1}";
+                stripe.transform.SetParent(varDiagRight.transform, false);
+                Object.DestroyImmediate(stripe.GetComponent<Collider>());
+                stripe.GetComponent<MeshRenderer>().sharedMaterial = matCrosswalk;
+                stripe.transform.localPosition = new Vector3(shiftX * invX, 0.52f, wz);
+                stripe.transform.localScale = new Vector3(3.2f * invX, stripeHeight, stripeThickness);
+            }
+            varDiagRight.SetActive(false);
+
+            // --- 변형 4: 좌우 분리형 듀얼 통로 스트라이프 8줄 ---
+            GameObject varDual = new GameObject("Variant_Dual_Pathway");
+            varDual.transform.SetParent(crosswalkGroup.transform, false);
+            for (int idx = 0; idx < crosswalkZ.Length; idx++)
+            {
+                float wz = crosswalkZ[idx];
+                // 좌측 통로
+                GameObject leftStripe = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                leftStripe.name = $"Stripe_L_{idx + 1}";
+                leftStripe.transform.SetParent(varDual.transform, false);
+                Object.DestroyImmediate(leftStripe.GetComponent<Collider>());
+                leftStripe.GetComponent<MeshRenderer>().sharedMaterial = matCrosswalk;
+                leftStripe.transform.localPosition = new Vector3(-2.2f * invX, 0.52f, wz);
+                leftStripe.transform.localScale = new Vector3(1.8f * invX, stripeHeight, stripeThickness);
+
+                // 우측 통로
+                GameObject rightStripe = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                rightStripe.name = $"Stripe_R_{idx + 1}";
+                rightStripe.transform.SetParent(varDual.transform, false);
+                Object.DestroyImmediate(rightStripe.GetComponent<Collider>());
+                rightStripe.GetComponent<MeshRenderer>().sharedMaterial = matCrosswalk;
+                rightStripe.transform.localPosition = new Vector3(2.2f * invX, 0.52f, wz);
+                rightStripe.transform.localScale = new Vector3(1.8f * invX, stripeHeight, stripeThickness);
+            }
+            varDual.SetActive(false);
+
+            // --- 변형 5: 광폭 중앙 통로 스트라이프 8줄 ---
+            GameObject varWide = new GameObject("Variant_Wide");
+            varWide.transform.SetParent(crosswalkGroup.transform, false);
+            for (int idx = 0; idx < crosswalkZ.Length; idx++)
+            {
+                float wz = crosswalkZ[idx];
+                GameObject stripe = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                stripe.name = $"Stripe_Wide_{idx + 1}";
+                stripe.transform.SetParent(varWide.transform, false);
+                Object.DestroyImmediate(stripe.GetComponent<Collider>());
+                stripe.GetComponent<MeshRenderer>().sharedMaterial = matCrosswalk;
+                stripe.transform.localPosition = new Vector3(0f, 0.52f, wz);
+                stripe.transform.localScale = new Vector3(5.2f * invX, stripeHeight, stripeThickness);
+            }
+            varWide.SetActive(false);
 
             GameObject dashesGroup = new GameObject("StandardDashesGroup");
             dashesGroup.transform.SetParent(roadRoot.transform, false);
@@ -358,13 +430,13 @@ namespace CampusRun.EditorTools
                 SerializedObject so = new SerializedObject(roadScript);
                 so.FindProperty("_crosswalkGroup").objectReferenceValue = crosswalkGroup;
                 so.FindProperty("_standardDashesGroup").objectReferenceValue = dashesGroup;
-                so.FindProperty("_crosswalkChance").floatValue = 0.7f;
+                so.FindProperty("_crosswalkChance").floatValue = 0.65f;
                 so.ApplyModifiedProperties();
             }
 
             PrefabUtility.SaveAsPrefabAsset(roadRoot, RoadLanePrefabPath);
             PrefabUtility.UnloadPrefabContents(roadRoot);
-            Debug.Log("[KoreanStreetSetupTool] PF_RoadLane.prefab 가로 횡단보도 재구성 완료!");
+            Debug.Log("[KoreanStreetSetupTool] PF_RoadLane.prefab 다채로운 얇은 횡단보도(5가지 변형) 재구성 완료!");
         }
 
         /// <summary>
