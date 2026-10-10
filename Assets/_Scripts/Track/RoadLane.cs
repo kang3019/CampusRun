@@ -67,6 +67,21 @@ namespace CampusRun.Track
         // [핵심!] RoadLane의 Transform 스케일 (20, 0.2, 1) 왜곡을 차량이 상속받지 않도록 독립 컨테이너 사용
         private static Transform _vehicleRootContainer;
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics()
+        {
+            ClearSharedPools();
+        }
+
+        /// <summary>
+        /// 씬 리로드 또는 게임 재시작 시 정적 풀에 남은 파괴된 오브젝트들을 깨끗이 비웁니다.
+        /// </summary>
+        public static void ClearSharedPools()
+        {
+            _sharedVehiclePools.Clear();
+            _vehicleRootContainer = null;
+        }
+
         private static Transform GetOrCreateContainer()
         {
             if (_vehicleRootContainer == null)
@@ -88,12 +103,13 @@ namespace CampusRun.Track
         {
             if (prefab == null) return null;
 
-            if (!_sharedVehiclePools.TryGetValue(prefab, out IObjectPool<MovingVehicle> pool))
+            if (!_sharedVehiclePools.TryGetValue(prefab, out IObjectPool<MovingVehicle> pool) || pool == null)
             {
                 Transform container = GetOrCreateContainer();
                 pool = new ObjectPool<MovingVehicle>(
                     createFunc: () =>
                     {
+                        if (container == null) container = GetOrCreateContainer();
                         MovingVehicle vehicle = Instantiate(prefab, container);
                         vehicle.gameObject.SetActive(false);
                         return vehicle;
@@ -104,6 +120,17 @@ namespace CampusRun.Track
                     collectionCheck: true,
                     defaultCapacity: 3,
                     maxSize: 10
+                    actionOnRelease: (vehicle) =>
+                    {
+                        if (vehicle != null) vehicle.gameObject.SetActive(false);
+                    },
+                    actionOnDestroy: (vehicle) =>
+                    {
+                        if (vehicle != null) Destroy(vehicle.gameObject);
+                    },
+                    collectionCheck: false,
+                    defaultCapacity: 5,
+                    maxSize: 20
                 );
                 _sharedVehiclePools[prefab] = pool;
             }
@@ -257,6 +284,16 @@ namespace CampusRun.Track
             }
         }
 
+        private void OnEnable()
+        {
+            CampusRun.Core.GameEvents.OnGameRestarted += ClearSharedPools;
+        }
+
+        private void OnDisable()
+        {
+            CampusRun.Core.GameEvents.OnGameRestarted -= ClearSharedPools;
+        }
+
         protected override void OnLaneRecycled()
         {
             base.OnLaneRecycled();
@@ -271,9 +308,12 @@ namespace CampusRun.Track
             for (int i = _activeVehicles.Count - 1; i >= 0; i--)
             {
                 ActiveVehicleInfo info = _activeVehicles[i];
-                if (info.Vehicle != null && info.Pool != null)
+                if (info.Vehicle != null)
                 {
-                    info.Pool.Release(info.Vehicle);
+                    if (info.Vehicle.gameObject.activeSelf)
+                    {
+                        info.Vehicle.Despawn();
+                    }
                 }
             }
             _activeVehicles.Clear();
@@ -304,8 +344,25 @@ namespace CampusRun.Track
             IObjectPool<MovingVehicle> pool = GetOrCreatePool(_currentLaneVehiclePrefab);
             if (pool == null) return;
 
-            MovingVehicle vehicle = pool.Get();
-            if (vehicle == null) return;
+            MovingVehicle vehicle = null;
+            try
+            {
+                vehicle = pool.Get();
+            }
+            catch
+            {
+                // 풀 내부 객체가 파괴된 경우 풀을 재생성하여 안전 획득
+                _sharedVehiclePools.Remove(_currentLaneVehiclePrefab);
+                pool = GetOrCreatePool(_currentLaneVehiclePrefab);
+                if (pool != null) vehicle = pool.Get();
+            }
+
+            // 혹시라도 꺼낸 인스턴스가 파괴된 객체인 경우 (MissingReference 방지)
+            if (vehicle == null)
+            {
+                Transform container = GetOrCreateContainer();
+                vehicle = Instantiate(_currentLaneVehiclePrefab, container);
+            }
 
             ActiveVehicleInfo info = new ActiveVehicleInfo
             {
@@ -331,7 +388,10 @@ namespace CampusRun.Track
                     }
                 }
 
-                pool.Release(v);
+                if (v != null && pool != null)
+                {
+                    pool.Release(v);
+                }
             });
         }
     }

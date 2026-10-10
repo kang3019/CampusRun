@@ -39,11 +39,16 @@ namespace CampusRun.Track
         [SerializeField] private StationaryObstacle _obstaclePrefab;
 
         [Tooltip("스폰 가능한 고정 장애물 프리팹 목록 (킥보드, 볼라드 등)")]
+        [Header("--- 고정 길막 장애물 설정 (방치된 킥보드, 캠퍼스 가로수 등) ---")]
+        [Tooltip("스폰할 고정 장애물 프리팹 (단일 호환용)")]
+        [SerializeField] private StationaryObstacle _obstaclePrefab;
+
+        [Tooltip("스폰할 고정 장애물 프리팹 목록 (킥보드, 나무 등 다종 장애물 지원)")]
         [SerializeField] private StationaryObstacle[] _obstaclePrefabs;
 
         [Tooltip("이 안전 레인에 고정 장애물이 배치될 확률 (0~1)")]
         [Range(0f, 1f)]
-        [SerializeField] private float _obstacleSpawnChance = 0.35f;
+        [SerializeField] private float _obstacleSpawnChance = 0.7f;
 
         [Tooltip("한 레인에 배치될 수 있는 최대 장애물 수 (통행로 보장을 위해 1개 권장)")]
         [SerializeField] private int _maxObstaclesPerLane = 1;
@@ -53,10 +58,16 @@ namespace CampusRun.Track
         [SerializeField] private int _maxGridX = 3;
 
         [Tooltip("게임 시작 후 장애물이 전혀 나오지 않는 초기 튜토리얼 Z 거리")]
-        [SerializeField] private int _safeStartZoneZ = 6;
+        [SerializeField] private int _safeStartZoneZ = 2;
 
         // 런타임 캐싱 및 풀링
         private MeshRenderer _meshRenderer;
+        // 런타임 추적 및 풀링
+        private readonly List<IObjectPool<StationaryObstacle>> _obstaclePools = new List<IObjectPool<StationaryObstacle>>();
+        private readonly List<StationaryObstacle> _activeObstacles = new List<StationaryObstacle>();
+        private readonly List<int> _availableXPositions = new List<int>();
+
+        // [핵심!] SafeLane의 Transform 스케일(20, 0.2, 1) 왜곡을 킥보드가 상속받지 않도록 독립 컨테이너 사용
         private static Transform _obstacleRootContainer;
         private static Transform _decorRootContainer;
 
@@ -187,6 +198,32 @@ namespace CampusRun.Track
             );
             _sharedObstaclePools[prefab] = pool;
             return pool;
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                StationaryObstacle targetPrefab = candidates[i];
+                IObjectPool<StationaryObstacle> pool = null;
+                pool = new ObjectPool<StationaryObstacle>(
+                    createFunc: () =>
+                    {
+                        StationaryObstacle obstacle = Instantiate(targetPrefab, container);
+                        obstacle.gameObject.SetActive(false);
+                        return obstacle;
+                    },
+                    actionOnGet: (obstacle) => { },
+                    actionOnRelease: (obstacle) =>
+                    {
+                        obstacle.gameObject.SetActive(false);
+                    },
+                    actionOnDestroy: (obstacle) =>
+                    {
+                        if (obstacle != null) Destroy(obstacle.gameObject);
+                    },
+                    collectionCheck: false,
+                    defaultCapacity: 3,
+                    maxSize: 10
+                );
+                _obstaclePools.Add(pool);
+            }
         }
 
         protected override void OnLaneSpawned()
@@ -257,6 +294,9 @@ namespace CampusRun.Track
             var pool = GetOrCreateObstaclePool(chosenPrefab);
             if (pool == null) return;
 
+            // [통행 가능성 100% 보장 규칙]
+            // 1. 레인 당 장애물은 정확히 '최대 1개'만 배치 (7개 칸 중 6개 칸은 항상 100% 안전 통행로 보장)
+            // 2. 직전 레인과 동일한 X 좌표 및 직전 레인과 인접한 좌우 칸은 제외하여 전진/우회 경로 완벽 확보
             _availableXPositions.Clear();
             for (int x = _minGridX; x <= _maxGridX; x++)
             {
@@ -265,7 +305,7 @@ namespace CampusRun.Track
                 _availableXPositions.Add(x);
             }
 
-            if (_availableXPositions.Count == 0 || _maxObstaclesPerLane <= 0) return;
+            if (_availableXPositions.Count == 0 || _maxObstaclesPerLane <= 0 || _obstaclePools.Count == 0) return;
 
             int chosenIndex = Random.Range(0, _availableXPositions.Count);
             int chosenX = _availableXPositions[chosenIndex];
@@ -275,12 +315,23 @@ namespace CampusRun.Track
             if (obstacle == null) return;
 
             Vector3 spawnPosition = new Vector3(chosenX, 0.16f, LaneZIndex);
+            // 랜덤 장애물 풀 선택 (예: 킥보드 vs 나무)
+            int poolIdx = Random.Range(0, _obstaclePools.Count);
+            IObjectPool<StationaryObstacle> selectedPool = _obstaclePools[poolIdx];
+
+            StationaryObstacle obstacle = selectedPool.Get();
+            _activeObstacles.Add(obstacle);
+            // 안전 레인 보도블록 윗면(Y=0.10f)에 정확히 밀착 스폰
+            Vector3 spawnPosition = new Vector3(chosenX, 0.10f, LaneZIndex);
 
             _activeObstacleInfos.Add(new SpawnedObstacleInfo { Obstacle = obstacle, Pool = pool });
 
             obstacle.Initialize(spawnPosition, (obs) =>
             {
-                if (pool != null) pool.Release(obs);
+                if (selectedPool != null)
+                {
+                    selectedPool.Release(obs);
+                }
             });
         }
 
@@ -297,25 +348,12 @@ namespace CampusRun.Track
         {
             base.OnLaneRecycled();
 
-            if (_activeStreetLight != null)
+            // 활성화되어 있던 모든 고정 장애물 안전 회수
+            for (int i = _activeObstacles.Count - 1; i >= 0; i--)
             {
-                try
+                if (_activeObstacles[i] != null && _activeObstacles[i].IsSpawned)
                 {
-                    if (_sharedStreetLightPool != null)
-                    {
-                        _sharedStreetLightPool.Release(_activeStreetLight);
-                    }
-                }
-                catch { }
-                _activeStreetLight = null;
-            }
-
-            for (int i = _activeObstacleInfos.Count - 1; i >= 0; i--)
-            {
-                var info = _activeObstacleInfos[i];
-                if (info.Obstacle != null && info.Pool != null)
-                {
-                    info.Obstacle.Recycle();
+                    _activeObstacles[i].Recycle();
                 }
             }
             _activeObstacleInfos.Clear();

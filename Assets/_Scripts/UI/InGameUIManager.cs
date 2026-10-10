@@ -56,6 +56,10 @@ namespace CampusRun.UI
 
         private void Awake()
         {
+            // 프레임 타임 안정화 및 GPU 발열/스터터링 방지 (60 FPS 고정)
+            Application.targetFrameRate = 60;
+            QualitySettings.vSyncCount = 1;
+
             EnsureEventSystem();
             EnsureHUDAndGameOverUI();
             SetupScoreHUDPosition();

@@ -480,3 +480,9 @@ Transform:
   - {fileID: 4312060084802926382}
   m_Father: {fileID: 4077757521461002079}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  - {fileID: 6000000000000001, guid: a483b27b87c14f3da3b4693a21ef429b, type: 3}
+  _obstacleSpawnChance: 0.7
+  _maxObstaclesPerLane: 1
+  _minGridX: -3
+  _maxGridX: 3
+  _safeStartZoneZ: 2

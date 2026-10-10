@@ -15,13 +15,19 @@ namespace CampusRun.EditorTools
     /// </summary>
     public static class CrossyRoadSetupTool
     {
-        private const string PrefsKey = "CampusRun_CrossyRoadSetup_Executed_v5";
+        private const string PrefsKey = "CampusRun_CrossyRoadSetup_Executed_v6";
 
         private const string CharacterFbxPath = "Assets/Characters/kenney_mini-characters/Models/FBX format/character-male-a.fbx";
         private const string CharacterTexturePath = "Assets/Characters/kenney_mini-characters/Models/FBX format/Textures/colormap.png";
 
         private const string BusFbxPath = "Assets/polycar/lowpoly_bus/source/bus.fbx";
         private const string BusTexturePath = "Assets/polycar/lowpoly_bus/textures/ImphenziaPalette01.png";
+
+        private const string ScooterSourcePrefabPath = "Assets/MARCIN'S Assets/Electric Scooter/Prefabs/Scooter_1.prefab";
+        private const string KickboardPrefabPath = "Assets/_Prefabs/Obstacles/PF_Kickboard.prefab";
+
+        private const string TreeSourcePrefabPath = "Assets/Low-Poly Style Nature/Prefabs/LPN_Trees.001.prefab";
+        private const string TreePrefabPath = "Assets/_Prefabs/Obstacles/PF_Tree.prefab";
 
         private const string BusPrefabPath = "Assets/_Prefabs/Obstacles/PF_Bus.prefab";
         private const string RoadLanePrefabPath = "Assets/_Prefabs/Environment/PF_RoadLane.prefab";
@@ -46,7 +52,7 @@ namespace CampusRun.EditorTools
             }
         }
 
-        [MenuItem("CampusRun/길건너 친구들 에셋 세팅 (캐릭터 & 버스)")]
+        [MenuItem("CampusRun/길건너 친구들 에셋 세팅 (캐릭터 & 버스 & 킥보드 & 나무)")]
         public static void SetupCrossyRoadAssets()
         {
             Debug.Log("[CrossyRoadSetupTool] === 길건너 친구들 에셋 세팅 시작 ===");
@@ -60,13 +66,20 @@ namespace CampusRun.EditorTools
             // 2. 버스 프리팹 (PF_Bus.prefab) 세팅
             SetupBusPrefab(matBus);
 
-            // 3. 도로 및 안전지대 레인 프리팹 머티리얼 세팅
-            SetupLanePrefabs(matRoad, matGrass);
+            // 3. 킥보드 프리팹 (PF_Kickboard.prefab) 3D 모델 세팅
+            SetupKickboardPrefab();
 
-            // 4. 테스트 씬의 플레이어 캐릭터 세팅
+            // 4. 나무 고정 장애물 프리팹 (PF_Tree.prefab) 3D 모델 세팅
+            SetupTreePrefab();
+
+            // 5. 안전지대 레인 프리팹 (PF_SafeLane.prefab) 머티리얼 및 장애물 풀링 세팅
+            SetupLanePrefabs(matRoad, matGrass);
+            SetupSafeLaneObstacles();
+
+            // 6. 테스트 씬의 플레이어 캐릭터 세팅
             SetupPlayerInScene(matChar);
 
-            // 5. 테스트 씬의 UI 매니저 및 캔버스 세팅
+            // 7. 테스트 씬의 UI 매니저 및 캔버스 세팅
             SetupUIInScene();
 
             AssetDatabase.SaveAssets();
@@ -555,6 +568,196 @@ namespace CampusRun.EditorTools
             EditorSceneManager.MarkSceneDirty(activeScene);
             EditorSceneManager.SaveScene(activeScene);
             Debug.Log("[CrossyRoadSetupTool] 씬 UI 세팅 완료 (Scale 0.9 고정 및 바인딩 완료)");
+        }
+
+        private static void SetupKickboardPrefab()
+        {
+            GameObject scooterSrc = AssetDatabase.LoadAssetAtPath<GameObject>(ScooterSourcePrefabPath);
+            if (scooterSrc == null)
+            {
+                Debug.LogError($"[CrossyRoadSetupTool] 킥보드 프리팹을 찾을 수 없습니다: {ScooterSourcePrefabPath}");
+                return;
+            }
+
+            GameObject prefabRoot = PrefabUtility.LoadPrefabContents(KickboardPrefabPath);
+            if (prefabRoot == null)
+            {
+                Debug.LogError($"[CrossyRoadSetupTool] PF_Kickboard 프리팹을 찾을 수 없습니다: {KickboardPrefabPath}");
+                return;
+            }
+
+            // 기존 임시 큐브 메시 제거
+            MeshFilter oldMf = prefabRoot.GetComponent<MeshFilter>();
+            if (oldMf != null) Object.DestroyImmediate(oldMf);
+
+            MeshRenderer oldMr = prefabRoot.GetComponent<MeshRenderer>();
+            if (oldMr != null) Object.DestroyImmediate(oldMr);
+
+            // 기존 VisualModel 자식 정리
+            Transform oldVisual = prefabRoot.transform.Find("VisualModel");
+            if (oldVisual != null) Object.DestroyImmediate(oldVisual.gameObject);
+
+            // 킥보드 모델 인스턴스화
+            GameObject visual = Object.Instantiate(scooterSrc, prefabRoot.transform);
+            visual.name = "VisualModel";
+
+            // 길가에 비스듬히 방치된 공유 킥보드 느낌을 위해 Y축 약 25도 회전
+            visual.transform.localRotation = Quaternion.Euler(0f, 25f, 0f);
+            visual.transform.localScale = Vector3.one * 1.1f;
+            visual.transform.localPosition = new Vector3(0f, 0f, 0f);
+
+            // 루트 Transform 정규화
+            prefabRoot.transform.localScale = Vector3.one;
+            prefabRoot.transform.localRotation = Quaternion.identity;
+
+            // BoxCollider 설정 (길을 물리적으로 막는 충돌체: isTrigger = false)
+            BoxCollider col = prefabRoot.GetComponent<BoxCollider>();
+            if (col == null) col = prefabRoot.AddComponent<BoxCollider>();
+            col.isTrigger = false;
+            col.size = new Vector3(0.55f, 0.95f, 0.8f);
+            col.center = new Vector3(0f, 0.45f, 0f);
+
+            StationaryObstacle obs = prefabRoot.GetComponent<StationaryObstacle>();
+            if (obs == null) obs = prefabRoot.AddComponent<StationaryObstacle>();
+            SerializedObject obsSo = new SerializedObject(obs);
+            SerializedProperty nameProp = obsSo.FindProperty("_obstacleName");
+            if (nameProp != null)
+            {
+                nameProp.stringValue = "방치된 공유 킥보드";
+                obsSo.ApplyModifiedProperties();
+            }
+
+            PrefabUtility.SaveAsPrefabAsset(prefabRoot, KickboardPrefabPath);
+            PrefabUtility.UnloadPrefabContents(prefabRoot);
+            Debug.Log("[CrossyRoadSetupTool] PF_Kickboard 3D 모델링 세팅 완료!");
+        }
+
+        private static void SetupTreePrefab()
+        {
+            GameObject treeSrc = AssetDatabase.LoadAssetAtPath<GameObject>(TreeSourcePrefabPath);
+            if (treeSrc == null)
+            {
+                Debug.LogError($"[CrossyRoadSetupTool] 나무 모델 프리팹을 찾을 수 없습니다: {TreeSourcePrefabPath}");
+                return;
+            }
+
+            GameObject prefabRoot;
+            bool isNew = !File.Exists(TreePrefabPath);
+            if (isNew)
+            {
+                prefabRoot = new GameObject("PF_Tree");
+            }
+            else
+            {
+                prefabRoot = PrefabUtility.LoadPrefabContents(TreePrefabPath);
+            }
+
+            prefabRoot.tag = "Obstacle";
+
+            // 기존 VisualModel 정리
+            Transform oldVisual = prefabRoot.transform.Find("VisualModel");
+            if (oldVisual != null) Object.DestroyImmediate(oldVisual.gameObject);
+
+            // 나무 모델 인스턴스화
+            GameObject visual = Object.Instantiate(treeSrc, prefabRoot.transform);
+            visual.name = "VisualModel";
+
+            // 원본 바운즈 측정하여 1 그리드 칸에 어울리도록 스케일 조정 (높이 약 2.4m, 밑동 직경 약 0.7m)
+            Renderer[] renderers = visual.GetComponentsInChildren<Renderer>(true);
+            Bounds totalBounds = new Bounds(Vector3.zero, Vector3.zero);
+            bool hasBounds = false;
+            foreach (var r in renderers)
+            {
+                if (!hasBounds)
+                {
+                    totalBounds = r.bounds;
+                    hasBounds = true;
+                }
+                else
+                {
+                    totalBounds.Encapsulate(r.bounds);
+                }
+            }
+
+            float rawHeight = totalBounds.size.y > 0.1f ? totalBounds.size.y : 3.0f;
+            float targetHeight = 2.4f;
+            float scale = targetHeight / rawHeight;
+            visual.transform.localScale = Vector3.one * scale;
+
+            float bottomY = totalBounds.min.y * scale;
+            visual.transform.localPosition = new Vector3(0f, -bottomY, 0f);
+            visual.transform.localRotation = Quaternion.identity;
+
+            prefabRoot.transform.localScale = Vector3.one;
+            prefabRoot.transform.localRotation = Quaternion.identity;
+
+            // BoxCollider 설정 (물리 충돌체: isTrigger = false)
+            BoxCollider col = prefabRoot.GetComponent<BoxCollider>();
+            if (col == null) col = prefabRoot.AddComponent<BoxCollider>();
+            col.isTrigger = false;
+            col.size = new Vector3(0.7f, targetHeight, 0.7f);
+            col.center = new Vector3(0f, targetHeight * 0.5f, 0f);
+
+            StationaryObstacle obs = prefabRoot.GetComponent<StationaryObstacle>();
+            if (obs == null) obs = prefabRoot.AddComponent<StationaryObstacle>();
+            SerializedObject obsSo = new SerializedObject(obs);
+            SerializedProperty nameProp = obsSo.FindProperty("_obstacleName");
+            if (nameProp != null)
+            {
+                nameProp.stringValue = "캠퍼스 가로수";
+                obsSo.ApplyModifiedProperties();
+            }
+
+            if (isNew)
+            {
+                PrefabUtility.SaveAsPrefabAsset(prefabRoot, TreePrefabPath);
+                Object.DestroyImmediate(prefabRoot);
+            }
+            else
+            {
+                PrefabUtility.SaveAsPrefabAsset(prefabRoot, TreePrefabPath);
+                PrefabUtility.UnloadPrefabContents(prefabRoot);
+            }
+
+            Debug.Log("[CrossyRoadSetupTool] PF_Tree 프리팹 생성 및 세팅 완료!");
+        }
+
+        private static void SetupSafeLaneObstacles()
+        {
+            GameObject safeRoot = PrefabUtility.LoadPrefabContents(SafeLanePrefabPath);
+            if (safeRoot == null)
+            {
+                Debug.LogError($"[CrossyRoadSetupTool] PF_SafeLane 프리팹을 찾을 수 없습니다: {SafeLanePrefabPath}");
+                return;
+            }
+
+            SafeLane safeLane = safeRoot.GetComponent<SafeLane>();
+            if (safeLane != null)
+            {
+                StationaryObstacle kickboardPrefab = AssetDatabase.LoadAssetAtPath<StationaryObstacle>(KickboardPrefabPath);
+                StationaryObstacle treePrefab = AssetDatabase.LoadAssetAtPath<StationaryObstacle>(TreePrefabPath);
+
+                SerializedObject so = new SerializedObject(safeLane);
+                SerializedProperty propArray = so.FindProperty("_obstaclePrefabs");
+                if (propArray != null)
+                {
+                    propArray.arraySize = 2;
+                    propArray.GetArrayElementAtIndex(0).objectReferenceValue = kickboardPrefab;
+                    propArray.GetArrayElementAtIndex(1).objectReferenceValue = treePrefab;
+                }
+
+                SerializedProperty propSingle = so.FindProperty("_obstaclePrefab");
+                if (propSingle != null)
+                {
+                    propSingle.objectReferenceValue = kickboardPrefab;
+                }
+
+                so.ApplyModifiedProperties();
+            }
+
+            PrefabUtility.SaveAsPrefabAsset(safeRoot, SafeLanePrefabPath);
+            PrefabUtility.UnloadPrefabContents(safeRoot);
+            Debug.Log("[CrossyRoadSetupTool] PF_SafeLane에 킥보드 및 가로수 장애물 다중 풀링 바인딩 완료!");
         }
     }
 }
