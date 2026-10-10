@@ -19,11 +19,11 @@ namespace CampusRun.Player
         [Tooltip("격자 1칸의 크기 (World Unit)")]
         [SerializeField] private float _gridSize = 1.0f;
 
-        [Tooltip("1칸 점프에 걸리는 시간(초) - 날렵하고 쫀득한 반응성")]
-        [SerializeField] private float _hopDuration = 0.16f;
+        [Tooltip("1칸 점프에 걸리는 시간(초) - 날렵하고 즉각적인 반응성")]
+        [SerializeField] private float _hopDuration = 0.14f;
 
         [Tooltip("점프 시 Y축 최고 정점 높이 - 과도한 붕 뜸 방지")]
-        [SerializeField] private float _jumpPeakHeight = 0.32f;
+        [SerializeField] private float _jumpPeakHeight = 0.28f;
 
         [Tooltip("좌/우 이동 가능한 최소/최대 X 격자 한계")]
         [SerializeField] private int _minGridX = -4;
@@ -31,6 +31,19 @@ namespace CampusRun.Player
 
         [Tooltip("최고 기록 대비 뒤로 후퇴할 수 있는 최대 허용 격자 수")]
         [SerializeField] private int _maxBackwardAllowance = 2;
+
+        [Header("--- 조작 민감도 및 인풋 버퍼링 설정 ---")]
+        [Tooltip("점프 중 키를 눌렀을 때 착지 즉시 반응하도록 기억하는 선입력 유효 시간(초)")]
+        [SerializeField] private float _inputBufferTime = 0.18f;
+
+        [Tooltip("방향키를 꾹 누르고 있을 때의 자동 연속 전진 활성화 여부")]
+        [SerializeField] private bool _enableAutoRepeat = true;
+
+        [Tooltip("연속 전진 시작 전 첫 대기 시간(초)")]
+        [SerializeField] private float _repeatInitialDelay = 0.20f;
+
+        [Tooltip("연속 전진 반복 간격(초)")]
+        [SerializeField] private float _repeatInterval = 0.14f;
 
         [Header("--- 애니메이션 및 연출 ---")]
         [Tooltip("바운스 시 캐릭터 메시를 담고 있는 자식 트랜스폼 (스쿼시 연출용)")]
@@ -63,9 +76,17 @@ namespace CampusRun.Player
         private bool _hasMovedAtLeastOnce = false;
         private bool _isWarningTriggered = false;
 
+        // 인풋 버퍼링 및 연속 조작 상태 변수
+        private Vector3Int? _bufferedHopDirection = null;
+        private float _bufferedHopTimer = 0f;
+        private float _holdTimer = 0f;
+        private float _nextRepeatThreshold = 0f;
+        private Vector3Int _currentHeldDirection = Vector3Int.zero;
+
         // 캐싱 변수
         private Vector3 _originalModelScale = Vector3.one;
         private Coroutine _hopCoroutine;
+        private Coroutine _landingBounceCoroutine;
         private Coroutine _drownCoroutine;
         private Coroutine _snatchCoroutine;
         private FloatingPlank _currentMountedPlank;
@@ -122,38 +143,100 @@ namespace CampusRun.Player
             // 지체 시간 체크 (오랫동안 망설이면 타임아웃 위험)
             CheckInactivityTimer();
 
-            // 점프 중에는 새로운 방향 입력을 받지 않음
-            if (_isHopping) return;
+            // 1. 선입력 버퍼 수명 타이머 차감
+            if (_bufferedHopTimer > 0f)
+            {
+                _bufferedHopTimer -= Time.deltaTime;
+                if (_bufferedHopTimer <= 0f)
+                {
+                    _bufferedHopDirection = null;
+                }
+            }
 
-            // 1. 키보드 입력 처리
+            // 2. 입력 처리 (점프 중이어도 선입력 버퍼에 담을 수 있도록 상시 수신)
             ProcessKeyboardInput();
-
-            // 2. 모바일/태블릿 터치 및 스와이프 입력 처리
             ProcessTouchInput();
+
+            // 3. 점프 중이 아니라면 대기 중인 버퍼 입력 즉시 실행
+            if (!_isHopping)
+            {
+                ConsumeBufferedInputIfReady();
+            }
         }
 
-        #region Input Processing (키보드 & 터치 입력)
+        #region Input Processing (키보드 & 터치 입력 및 인풋 버퍼링)
 
+        /// <summary>
+        /// 키보드 방향키 입력을 감지합니다. 즉시 단발 입력 및 꾹 누르고 있을 때의 자동 연속 홉을 모두 지원합니다.
+        /// </summary>
         private void ProcessKeyboardInput()
         {
             var keyboard = Keyboard.current;
             if (keyboard == null) return;
 
+            Vector3Int pressedDir = Vector3Int.zero;
+            bool wasPressedThisFrame = false;
+
             if (keyboard.wKey.wasPressedThisFrame || keyboard.upArrowKey.wasPressedThisFrame)
             {
-                TryHop(Vector3Int.forward);
+                pressedDir = Vector3Int.forward;
+                wasPressedThisFrame = true;
             }
             else if (keyboard.sKey.wasPressedThisFrame || keyboard.downArrowKey.wasPressedThisFrame)
             {
-                TryHop(Vector3Int.back);
+                pressedDir = Vector3Int.back;
+                wasPressedThisFrame = true;
             }
             else if (keyboard.aKey.wasPressedThisFrame || keyboard.leftArrowKey.wasPressedThisFrame)
             {
-                TryHop(Vector3Int.left);
+                pressedDir = Vector3Int.left;
+                wasPressedThisFrame = true;
             }
             else if (keyboard.dKey.wasPressedThisFrame || keyboard.rightArrowKey.wasPressedThisFrame)
             {
-                TryHop(Vector3Int.right);
+                pressedDir = Vector3Int.right;
+                wasPressedThisFrame = true;
+            }
+
+            // 이번 프레임에 키가 새로 눌린 경우: 즉시 반응 또는 선입력 버퍼 등록
+            if (wasPressedThisFrame)
+            {
+                RegisterHopInput(pressedDir);
+                _currentHeldDirection = pressedDir;
+                _holdTimer = 0f;
+                _nextRepeatThreshold = _repeatInitialDelay;
+                return;
+            }
+
+            // 방향키를 꾹 누르고 있을 때의 연속 홉 처리
+            if (_enableAutoRepeat)
+            {
+                Vector3Int heldDir = Vector3Int.zero;
+                if (keyboard.wKey.isPressed || keyboard.upArrowKey.isPressed) heldDir = Vector3Int.forward;
+                else if (keyboard.sKey.isPressed || keyboard.downArrowKey.isPressed) heldDir = Vector3Int.back;
+                else if (keyboard.aKey.isPressed || keyboard.leftArrowKey.isPressed) heldDir = Vector3Int.left;
+                else if (keyboard.dKey.isPressed || keyboard.rightArrowKey.isPressed) heldDir = Vector3Int.right;
+
+                if (heldDir != Vector3Int.zero && heldDir == _currentHeldDirection)
+                {
+                    _holdTimer += Time.deltaTime;
+                    if (_holdTimer >= _nextRepeatThreshold)
+                    {
+                        RegisterHopInput(heldDir);
+                        _nextRepeatThreshold += _repeatInterval;
+                    }
+                }
+                else if (heldDir != Vector3Int.zero)
+                {
+                    _currentHeldDirection = heldDir;
+                    _holdTimer = 0f;
+                    _nextRepeatThreshold = _repeatInitialDelay;
+                }
+                else
+                {
+                    _currentHeldDirection = Vector3Int.zero;
+                    _holdTimer = 0f;
+                }
             }
         }
 
@@ -190,17 +273,54 @@ namespace CampusRun.Player
                     if (Mathf.Abs(delta.x) > Mathf.Abs(delta.y))
                     {
                         // 좌우 스와이프
-                        if (delta.x > 0) TryHop(Vector3Int.right);
-                        else TryHop(Vector3Int.left);
+                        if (delta.x > 0) RegisterHopInput(Vector3Int.right);
+                        else RegisterHopInput(Vector3Int.left);
                     }
                     else
                     {
                         // 상하 스와이프 (탭 포함 기본 위로 전진)
-                        if (delta.y > 0) TryHop(Vector3Int.forward);
-                        else TryHop(Vector3Int.back);
+                        if (delta.y > 0) RegisterHopInput(Vector3Int.forward);
+                        else RegisterHopInput(Vector3Int.back);
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// 사용자 입력을 전달받아, 현재 점프 중이면 선입력 버퍼에 저장하고 여유 상태이면 즉시 뜁니다.
+        /// </summary>
+        private void RegisterHopInput(Vector3Int gridDirection)
+        {
+            if (!_isAlive || !_isControlEnabled) return;
+
+            if (!_isHopping)
+            {
+                TryHop(gridDirection);
+            }
+            else
+            {
+                // 점프 체공 중에 들어온 입력은 버퍼에 보관 -> 착지 순간 0ms 딜레이로 즉시 도약!
+                _bufferedHopDirection = gridDirection;
+                _bufferedHopTimer = _inputBufferTime;
+            }
+        }
+
+        /// <summary>
+        /// 버퍼에 유효한 선입력이 대기 중이고 캐릭터가 착지 상태라면 즉시 다음 홉을 실행합니다.
+        /// </summary>
+        private bool ConsumeBufferedInputIfReady()
+        {
+            if (_isHopping || !_isAlive || !_isControlEnabled) return false;
+
+            if (_bufferedHopDirection.HasValue && _bufferedHopTimer > 0f)
+            {
+                Vector3Int dir = _bufferedHopDirection.Value;
+                _bufferedHopDirection = null;
+                _bufferedHopTimer = 0f;
+                return TryHop(dir);
+            }
+
+            return false;
         }
 
         #endregion
@@ -213,6 +333,13 @@ namespace CampusRun.Player
         public bool TryHop(Vector3Int gridDirection)
         {
             if (_isHopping || !_isAlive || !_isControlEnabled) return false;
+
+            // 이전 착지 바운스 연출이 돌고 있었다면 즉시 중단하고 새 점프 도약으로 전환
+            if (_landingBounceCoroutine != null)
+            {
+                StopCoroutine(_landingBounceCoroutine);
+                _landingBounceCoroutine = null;
+            }
 
             int targetX = _currentGridX + gridDirection.x;
             int targetZ = _currentGridZ + gridDirection.z;
@@ -341,6 +468,9 @@ namespace CampusRun.Player
                 _visualModelTransform.localScale = _originalModelScale;
             }
             _isHopping = false;
+
+            // 막혀서 튕겨 돌아온 후에도 버퍼에 다른 유효 입력이 있으면 즉시 시도
+            ConsumeBufferedInputIfReady();
         }
 
         private IEnumerator HopRoutine(Vector3 startPos, Vector3 targetPos, Quaternion startRot, Quaternion targetRot)
@@ -391,40 +521,58 @@ namespace CampusRun.Player
             transform.position = targetPos;
             transform.rotation = targetRot;
 
-            // 5. [핵심] 착지 임팩트 젤리 바운스 (Landing Squash & Rebound)
-            if (_visualModelTransform != null)
-            {
-                _visualModelTransform.localRotation = Quaternion.identity;
-
-                // 1단계: 바닥에 닿는 순간 쿵! 찰떡처럼 바닥으로 눌림 (Squash, 0.04초)
-                float squashDuration = 0.04f;
-                float sqElapsed = 0f;
-                while (sqElapsed < squashDuration)
-                {
-                    sqElapsed += Time.deltaTime;
-                    float st = Mathf.Clamp01(sqElapsed / squashDuration);
-                    _visualModelTransform.localScale = Vector3.Lerp(_originalModelScale, _landSquashScale, st);
-                    yield return null;
-                }
-
-                // 2단계: 원래 크기로 뿅! 탄성 있게 복귀 (Rebound, 0.05초)
-                float bounceDuration = 0.05f;
-                float bElapsed = 0f;
-                while (bElapsed < bounceDuration)
-                {
-                    bElapsed += Time.deltaTime;
-                    float bt = Mathf.Clamp01(bElapsed / bounceDuration);
-                    _visualModelTransform.localScale = Vector3.Lerp(_landSquashScale, _originalModelScale, Mathf.SmoothStep(0f, 1f, bt));
-                    yield return null;
-                }
-
-                _visualModelTransform.localScale = _originalModelScale;
-            }
-
+            // 착지 즉시 조작 잠금을 해제하여 반응성 극대화 (입력 지연 0ms)
             _isHopping = false;
 
             // 착지점의 지형(물웅덩이/널판지) 검사
             CheckLandingGround(targetPos);
+
+            if (_isAlive)
+            {
+                // 선입력 버퍼에 대기 중인 다음 입력이 있다면 지체 없이 즉시 다음 점프 개시
+                if (!ConsumeBufferedInputIfReady())
+                {
+                    // 대기 중인 다음 입력이 없을 때만 쫀득한 착지 젤리 바운스 연출 실행
+                    if (_landingBounceCoroutine != null) StopCoroutine(_landingBounceCoroutine);
+                    _landingBounceCoroutine = StartCoroutine(LandingBounceRoutine());
+                }
+            }
+        }
+
+        /// <summary>
+        /// 착지 순간 시각적 만족감을 주는 쫀득한 젤리 스쿼시/리바운드 연출입니다.
+        /// 조작 플래그(_isHopping)를 잠그지 않으므로 연타 시 조작감이 씹히지 않습니다.
+        /// </summary>
+        private IEnumerator LandingBounceRoutine()
+        {
+            if (_visualModelTransform == null) yield break;
+
+            _visualModelTransform.localRotation = Quaternion.identity;
+
+            // 1단계: 바닥에 닿는 순간 쿵! 찰떡처럼 바닥으로 눌림 (Squash, 0.04초)
+            float squashDuration = 0.04f;
+            float sqElapsed = 0f;
+            while (sqElapsed < squashDuration)
+            {
+                sqElapsed += Time.deltaTime;
+                float st = Mathf.Clamp01(sqElapsed / squashDuration);
+                _visualModelTransform.localScale = Vector3.Lerp(_originalModelScale, _landSquashScale, st);
+                yield return null;
+            }
+
+            // 2단계: 원래 크기로 뿅! 탄성 있게 복귀 (Rebound, 0.05초)
+            float bounceDuration = 0.05f;
+            float bElapsed = 0f;
+            while (bElapsed < bounceDuration)
+            {
+                bElapsed += Time.deltaTime;
+                float bt = Mathf.Clamp01(bElapsed / bounceDuration);
+                _visualModelTransform.localScale = Vector3.Lerp(_landSquashScale, _originalModelScale, Mathf.SmoothStep(0f, 1f, bt));
+                yield return null;
+            }
+
+            _visualModelTransform.localScale = _originalModelScale;
+            _landingBounceCoroutine = null;
         }
 
         /// <summary>
@@ -470,7 +618,7 @@ namespace CampusRun.Player
             {
                 if (_drownCoroutine != null) StopCoroutine(_drownCoroutine);
                 _drownCoroutine = StartCoroutine(DrownRoutine());
-                Die("🌊 비 온 뒤 거대 물웅덩이에 빠져 지각 탈락했습니다!");
+                Die("🚧 공사 현장 흙탕물 웅덩이에 빠져 신발이 벗겨지는 바람에 1교시 지각했습니다!");
             }
         }
 
@@ -696,6 +844,11 @@ namespace CampusRun.Player
         private void ResetPlayer()
         {
             if (_hopCoroutine != null) StopCoroutine(_hopCoroutine);
+            if (_landingBounceCoroutine != null)
+            {
+                StopCoroutine(_landingBounceCoroutine);
+                _landingBounceCoroutine = null;
+            }
             if (_drownCoroutine != null) StopCoroutine(_drownCoroutine);
 
             if (_snatchCoroutine != null)
@@ -720,6 +873,12 @@ namespace CampusRun.Player
             _hasMovedAtLeastOnce = false;
             _isWarningTriggered = false;
             GameEvents.TriggerInactivityWarning(false);
+
+            _bufferedHopDirection = null;
+            _bufferedHopTimer = 0f;
+            _holdTimer = 0f;
+            _nextRepeatThreshold = 0f;
+            _currentHeldDirection = Vector3Int.zero;
 
             _isHopping = false;
             _isAlive = true;
