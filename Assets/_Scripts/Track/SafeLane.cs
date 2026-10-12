@@ -8,7 +8,7 @@ namespace CampusRun.Track
     /// <summary>
     /// 플레이어가 잠시 서서 타이밍을 잴 수 있는 안전 보도블록 레인입니다.
     /// 한국 도심 보도블록 머티리얼과 연석/점자블록이 적용되어 있으며,
-    /// 가로등이 맵 곳곳에 듬성듬성 분산 배치되고 킥보드/볼라드가 장애물로 등장합니다.
+    /// 가로등이 맵 곳곳에 듬성듬성 분산 배치되고 킥보드/가로수/볼라드가 장애물로 등장합니다.
     /// </summary>
     public class SafeLane : BaseLane
     {
@@ -34,13 +34,8 @@ namespace CampusRun.Track
         [Range(0f, 1f)]
         [SerializeField] private float _streetLightSpawnChance = 0.12f;
 
-        [Header("--- 고정 길막 장애물 설정 (방치된 킥보드 / 볼라드) ---")]
-        [Tooltip("스폰할 단일 기본 고정 장애물 프리팹 (하위 호환)")]
-        [SerializeField] private StationaryObstacle _obstaclePrefab;
-
-        [Tooltip("스폰 가능한 고정 장애물 프리팹 목록 (킥보드, 볼라드 등)")]
         [Header("--- 고정 길막 장애물 설정 (방치된 킥보드, 캠퍼스 가로수 등) ---")]
-        [Tooltip("스폰할 고정 장애물 프리팹 (단일 호환용)")]
+        [Tooltip("스폰할 단일 기본 고정 장애물 프리팹 (단일 호환용)")]
         [SerializeField] private StationaryObstacle _obstaclePrefab;
 
         [Tooltip("스폰할 고정 장애물 프리팹 목록 (킥보드, 나무 등 다종 장애물 지원)")]
@@ -60,18 +55,14 @@ namespace CampusRun.Track
         [Tooltip("게임 시작 후 장애물이 전혀 나오지 않는 초기 튜토리얼 Z 거리")]
         [SerializeField] private int _safeStartZoneZ = 2;
 
-        // 런타임 캐싱 및 풀링
+        // 런타임 캐싱
         private MeshRenderer _meshRenderer;
-        // 런타임 추적 및 풀링
-        private readonly List<IObjectPool<StationaryObstacle>> _obstaclePools = new List<IObjectPool<StationaryObstacle>>();
-        private readonly List<StationaryObstacle> _activeObstacles = new List<StationaryObstacle>();
-        private readonly List<int> _availableXPositions = new List<int>();
 
-        // [핵심!] SafeLane의 Transform 스케일(20, 0.2, 1) 왜곡을 킥보드가 상속받지 않도록 독립 컨테이너 사용
+        // [핵심!] SafeLane의 Transform 스케일(20, 0.2, 1) 왜곡을 장애물이 상속받지 않도록 독립 컨테이너 사용
         private static Transform _obstacleRootContainer;
         private static Transform _decorRootContainer;
 
-        // 장애물 풀
+        // 장애물 프리팹별 전역 공유 오브젝트 풀
         private static readonly Dictionary<StationaryObstacle, IObjectPool<StationaryObstacle>> _sharedObstaclePools
             = new Dictionary<StationaryObstacle, IObjectPool<StationaryObstacle>>();
 
@@ -170,7 +161,7 @@ namespace CampusRun.Track
                 actionOnGet: (obj) => { },
                 actionOnRelease: (obj) => { if (obj != null) obj.SetActive(false); },
                 actionOnDestroy: (obj) => { if (obj != null) Destroy(obj); },
-                collectionCheck: true,
+                collectionCheck: false,
                 defaultCapacity: 6,
                 maxSize: 20
             );
@@ -179,7 +170,7 @@ namespace CampusRun.Track
         private IObjectPool<StationaryObstacle> GetOrCreateObstaclePool(StationaryObstacle prefab)
         {
             if (prefab == null) return null;
-            if (_sharedObstaclePools.TryGetValue(prefab, out var pool)) return pool;
+            if (_sharedObstaclePools.TryGetValue(prefab, out var pool) && pool != null) return pool;
 
             Transform container = GetOrCreateObstacleContainer();
             pool = new ObjectPool<StationaryObstacle>(
@@ -192,38 +183,12 @@ namespace CampusRun.Track
                 actionOnGet: (obs) => { },
                 actionOnRelease: (obs) => { if (obs != null) obs.gameObject.SetActive(false); },
                 actionOnDestroy: (obs) => { if (obs != null) Destroy(obs.gameObject); },
-                collectionCheck: true,
+                collectionCheck: false,
                 defaultCapacity: 4,
                 maxSize: 15
             );
             _sharedObstaclePools[prefab] = pool;
             return pool;
-            for (int i = 0; i < candidates.Count; i++)
-            {
-                StationaryObstacle targetPrefab = candidates[i];
-                IObjectPool<StationaryObstacle> pool = null;
-                pool = new ObjectPool<StationaryObstacle>(
-                    createFunc: () =>
-                    {
-                        StationaryObstacle obstacle = Instantiate(targetPrefab, container);
-                        obstacle.gameObject.SetActive(false);
-                        return obstacle;
-                    },
-                    actionOnGet: (obstacle) => { },
-                    actionOnRelease: (obstacle) =>
-                    {
-                        obstacle.gameObject.SetActive(false);
-                    },
-                    actionOnDestroy: (obstacle) =>
-                    {
-                        if (obstacle != null) Destroy(obstacle.gameObject);
-                    },
-                    collectionCheck: false,
-                    defaultCapacity: 3,
-                    maxSize: 10
-                );
-                _obstaclePools.Add(pool);
-            }
         }
 
         protected override void OnLaneSpawned()
@@ -240,7 +205,7 @@ namespace CampusRun.Track
                 _curbDecorations.SetActive(true);
             }
 
-            // 점자블록은 가끔씩만(25% 확률) 등장
+            // 점자블록은 가끔씩만 등장
             bool showBraille = Random.value < _brailleBlockChance;
             if (_brailleBlockGroup != null)
             {
@@ -250,7 +215,7 @@ namespace CampusRun.Track
             // 2. 가로등 분산 스폰 (12% 확률로 좌/우 무작위 한 쪽에만 듬성듬성 배치)
             SpawnStreetLightIfLucky();
 
-            // 3. 고정 길막 장애물 스폰 (킥보드 / 볼라드 등)
+            // 3. 고정 길막 장애물 스폰 (방치된 킥보드, 캠퍼스 가로수 등)
             if (LaneZIndex > _safeStartZoneZ)
             {
                 if (Random.value < _obstacleSpawnChance)
@@ -305,22 +270,30 @@ namespace CampusRun.Track
                 _availableXPositions.Add(x);
             }
 
-            if (_availableXPositions.Count == 0 || _maxObstaclesPerLane <= 0 || _obstaclePools.Count == 0) return;
+            if (_availableXPositions.Count == 0 || _maxObstaclesPerLane <= 0) return;
 
             int chosenIndex = Random.Range(0, _availableXPositions.Count);
             int chosenX = _availableXPositions[chosenIndex];
             _lastSpawnedX = chosenX;
 
-            StationaryObstacle obstacle = pool.Get();
-            if (obstacle == null) return;
+            StationaryObstacle obstacle = null;
+            try
+            {
+                obstacle = pool.Get();
+            }
+            catch
+            {
+                _sharedObstaclePools.Remove(chosenPrefab);
+                pool = GetOrCreateObstaclePool(chosenPrefab);
+                if (pool != null) obstacle = pool.Get();
+            }
 
-            Vector3 spawnPosition = new Vector3(chosenX, 0.16f, LaneZIndex);
-            // 랜덤 장애물 풀 선택 (예: 킥보드 vs 나무)
-            int poolIdx = Random.Range(0, _obstaclePools.Count);
-            IObjectPool<StationaryObstacle> selectedPool = _obstaclePools[poolIdx];
+            if (obstacle == null)
+            {
+                Transform container = GetOrCreateObstacleContainer();
+                obstacle = Instantiate(chosenPrefab, container);
+            }
 
-            StationaryObstacle obstacle = selectedPool.Get();
-            _activeObstacles.Add(obstacle);
             // 안전 레인 보도블록 윗면(Y=0.10f)에 정확히 밀착 스폰
             Vector3 spawnPosition = new Vector3(chosenX, 0.10f, LaneZIndex);
 
@@ -328,9 +301,9 @@ namespace CampusRun.Track
 
             obstacle.Initialize(spawnPosition, (obs) =>
             {
-                if (selectedPool != null)
+                if (pool != null && obs != null)
                 {
-                    selectedPool.Release(obs);
+                    pool.Release(obs);
                 }
             });
         }
@@ -339,7 +312,25 @@ namespace CampusRun.Track
         {
             if (_obstaclePrefabs != null && _obstaclePrefabs.Length > 0)
             {
-                return _obstaclePrefabs[Random.Range(0, _obstaclePrefabs.Length)];
+                int nonNullCount = 0;
+                for (int i = 0; i < _obstaclePrefabs.Length; i++)
+                {
+                    if (_obstaclePrefabs[i] != null) nonNullCount++;
+                }
+
+                if (nonNullCount > 0)
+                {
+                    int targetIdx = Random.Range(0, nonNullCount);
+                    int currentCount = 0;
+                    for (int i = 0; i < _obstaclePrefabs.Length; i++)
+                    {
+                        if (_obstaclePrefabs[i] != null)
+                        {
+                            if (currentCount == targetIdx) return _obstaclePrefabs[i];
+                            currentCount++;
+                        }
+                    }
+                }
             }
             return _obstaclePrefab;
         }
@@ -348,12 +339,26 @@ namespace CampusRun.Track
         {
             base.OnLaneRecycled();
 
-            // 활성화되어 있던 모든 고정 장애물 안전 회수
-            for (int i = _activeObstacles.Count - 1; i >= 0; i--)
+            if (_activeStreetLight != null)
             {
-                if (_activeObstacles[i] != null && _activeObstacles[i].IsSpawned)
+                try
                 {
-                    _activeObstacles[i].Recycle();
+                    if (_sharedStreetLightPool != null)
+                    {
+                        _sharedStreetLightPool.Release(_activeStreetLight);
+                    }
+                }
+                catch { }
+                _activeStreetLight = null;
+            }
+
+            // 활성화되어 있던 모든 고정 장애물 안전 회수
+            for (int i = _activeObstacleInfos.Count - 1; i >= 0; i--)
+            {
+                var info = _activeObstacleInfos[i];
+                if (info.Obstacle != null && info.Obstacle.IsSpawned)
+                {
+                    info.Obstacle.Recycle();
                 }
             }
             _activeObstacleInfos.Clear();

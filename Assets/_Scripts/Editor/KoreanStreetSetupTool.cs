@@ -89,8 +89,8 @@ namespace CampusRun.EditorTools
             // 5. PF_RoadLane 재구성
             RebuildRoadLanePrefab(matCrosswalk, matRoadMarking);
 
-            // 6. PF_WaterLane (보도블록 공사현장 생시멘트 구덩이) & PF_FloatingPlank (철제 안전 비계 발판)
-            RebuildConstructionLaneAndScaffold(matWetCement, matScaffoldMetal, matScaffoldDark, matSafetyYellow, matCurb);
+            // 6. 물웅덩이 & 널판지 컨셉 보존 (공사장 덮어쓰기 비활성화)
+            // RebuildConstructionLaneAndScaffold(matWetCement, matScaffoldMetal, matScaffoldDark, matSafetyYellow, matCurb);
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
@@ -430,7 +430,7 @@ namespace CampusRun.EditorTools
                 SerializedObject so = new SerializedObject(roadScript);
                 so.FindProperty("_crosswalkGroup").objectReferenceValue = crosswalkGroup;
                 so.FindProperty("_standardDashesGroup").objectReferenceValue = dashesGroup;
-                so.FindProperty("_crosswalkChance").floatValue = 0.65f;
+                so.FindProperty("_crosswalkChance").floatValue = 0.25f;
                 so.ApplyModifiedProperties();
             }
 
