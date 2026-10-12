@@ -55,6 +55,16 @@ namespace CampusRun.Track
         [Tooltip("게임 시작 후 장애물이 전혀 나오지 않는 초기 튜토리얼 Z 거리")]
         [SerializeField] private int _safeStartZoneZ = 2;
 
+        [Header("--- 사이드 가로수길 (와이드 스크린 공백 차단 및 풍경) ---")]
+        [Tooltip("와이드 화면 양옆 공백을 메우는 사이드 가로수 프리팹 (비어있으면 _obstaclePrefabs 중 Tree 자동 탐색)")]
+        [SerializeField] private StationaryObstacle _sideTreePrefab;
+
+        [Tooltip("사이드 가로수가 배치될 좌우 X축 좌표 목록 (플레이 영역 ±4칸 바깥)")]
+        [SerializeField] private float[] _sideTreePositionsX = new float[] { -6.5f, -9.8f, -13.2f, -16.8f, -20.5f, 6.5f, 9.8f, 13.2f, 16.8f, 20.5f };
+
+        [Tooltip("사이드 가로수 스폰 활성화 여부")]
+        [SerializeField] private bool _enableSideTrees = true;
+
         // 런타임 캐싱
         private MeshRenderer _meshRenderer;
 
@@ -222,6 +232,83 @@ namespace CampusRun.Track
                 {
                     SpawnObstacles();
                 }
+            }
+
+            // 4. 와이드 스크린 공백 차단용 사이드 가로수길 스폰 (플레이 영역 좌우 바깥)
+            SpawnSideTrees();
+        }
+
+        /// <summary>
+        /// 와이드 스크린에서 좌우 공백을 가려주고 풍성한 그림자를 드리우는 사이드 가로수길을 스폰합니다.
+        /// (플레이 영역 ±4칸 바깥에만 배치되어 플레이어 통행을 100% 보장합니다)
+        /// </summary>
+        private void SpawnSideTrees()
+        {
+            if (!_enableSideTrees) return;
+
+            StationaryObstacle treePrefab = _sideTreePrefab;
+            if (treePrefab == null)
+            {
+                // _obstaclePrefabs에서 Tree 이름을 가진 프리팹 자동 탐색
+                if (_obstaclePrefabs != null)
+                {
+                    for (int i = 0; i < _obstaclePrefabs.Length; i++)
+                    {
+                        if (_obstaclePrefabs[i] != null && _obstaclePrefabs[i].name.Contains("Tree"))
+                        {
+                            treePrefab = _obstaclePrefabs[i];
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (treePrefab == null) return;
+
+            var pool = GetOrCreateObstaclePool(treePrefab);
+            if (pool == null) return;
+
+            if (_sideTreePositionsX == null || _sideTreePositionsX.Length == 0) return;
+
+            for (int i = 0; i < _sideTreePositionsX.Length; i++)
+            {
+                float baseX = _sideTreePositionsX[i];
+                // 자연스러운 숲길 느낌을 위한 약간의 시차 지터
+                float offsetX = Mathf.Sin(LaneZIndex * 3.7f + i) * 0.35f;
+                float spawnX = baseX + offsetX;
+
+                StationaryObstacle tree = null;
+                try
+                {
+                    tree = pool.Get();
+                }
+                catch
+                {
+                    _sharedObstaclePools.Remove(treePrefab);
+                    pool = GetOrCreateObstaclePool(treePrefab);
+                    if (pool != null) tree = pool.Get();
+                }
+
+                if (tree == null)
+                {
+                    Transform container = GetOrCreateObstacleContainer();
+                    tree = Instantiate(treePrefab, container);
+                }
+
+                Vector3 spawnPos = new Vector3(spawnX, 0.10f, LaneZIndex);
+                _activeObstacleInfos.Add(new SpawnedObstacleInfo { Obstacle = tree, Pool = pool });
+
+                tree.Initialize(spawnPos, (obs) =>
+                {
+                    if (pool != null && obs != null)
+                    {
+                        pool.Release(obs);
+                    }
+                });
+
+                // 가로수의 자연스러운 회전 변화 (Y축 회전)
+                float randomRotY = (LaneZIndex * 47f + i * 31f) % 360f;
+                tree.transform.rotation = Quaternion.Euler(0f, randomRotY, 0f);
             }
         }
 

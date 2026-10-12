@@ -37,8 +37,8 @@ namespace CampusRun.Track
         [SerializeField] private float _minInterval = 4.0f;
         [SerializeField] private float _maxInterval = 7.5f;
 
-        [Tooltip("스폰 시작 X축 좌표")]
-        [SerializeField] private float _spawnBoundaryX = 16f;
+        [Tooltip("스폰 시작 X축 좌표 (도로 폭 60m 기준 ±28.0m)")]
+        [SerializeField] private float _spawnBoundaryX = 28.0f;
 
         // 런타임 상태
         private float _currentDirection = 1f;

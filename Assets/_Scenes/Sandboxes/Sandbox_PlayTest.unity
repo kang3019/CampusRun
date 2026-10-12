@@ -660,7 +660,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 0.9, y: 0.9, z: 0.9}
+  m_LocalScale: {x: 0.86, y: 0.86, z: 0.86}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1674270149}
@@ -1878,7 +1878,7 @@ Camera:
     height: 1
   near clip plane: 0.3
   far clip plane: 1000
-  field of view: 60
+  field of view: 42
   orthographic: 0
   orthographic size: 5
   m_Depth: -1
@@ -1905,7 +1905,7 @@ Transform:
   m_GameObject: {fileID: 2097587451}
   serializedVersion: 2
   m_LocalRotation: {x: 0.317851, y: 0.204648, z: -0.070466, w: 0.923107}
-  m_LocalPosition: {x: -4.8, y: 7.8, z: -8.2}
+  m_LocalPosition: {x: -3.8, y: 6.4, z: -6.8}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1969,9 +1969,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CampusRun.Player.FollowCamera
   _viewMode: 0
   _target: {fileID: 0}
-  _offset: {x: -4.8, y: 7.8, z: -8.2}
-  _pitchAngle: 38
-  _yawAngle: 25
+  _offset: {x: -3.8, y: 6.4, z: -6.8}
+  _pitchAngle: 36
+  _yawAngle: 24
   _smoothTime: 0.15
   _onlyAdvanceForward: 1
   _enableAutoScroll: 0

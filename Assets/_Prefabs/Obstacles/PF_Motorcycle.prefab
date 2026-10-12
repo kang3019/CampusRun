@@ -126,4 +126,4 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CampusRun.Obstacles.FastMotorcycle
   _rushSpeed: 30
-  _despawnBoundaryX: 18
+  _despawnBoundaryX: 30

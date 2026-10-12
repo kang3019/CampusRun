@@ -111,8 +111,8 @@ namespace CampusRun.Player
 
             if (_visualModelTransform != null)
             {
-                // 사용자 요청: 스케일을 0.9 값으로 고정
-                _visualModelTransform.localScale = new Vector3(0.9f, 0.9f, 0.9f);
+                // 사용자 요청: 캐릭터 스케일을 0.86으로 설정
+                _visualModelTransform.localScale = new Vector3(0.86f, 0.86f, 0.86f);
                 _originalModelScale = _visualModelTransform.localScale;
                 _jumpStretchScale = new Vector3(_originalModelScale.x * 0.85f, _originalModelScale.y * 1.25f, _originalModelScale.z * 0.85f);
                 _landSquashScale = new Vector3(_originalModelScale.x * 1.20f, _originalModelScale.y * 0.80f, _originalModelScale.z * 1.20f);
@@ -385,7 +385,15 @@ namespace CampusRun.Player
             // 상태 갱신
             _currentGridX = targetX;
             _currentGridZ = targetZ;
-            _hasMovedAtLeastOnce = true;
+
+            // 첫 방향키 입력으로 게임 시작 트리거 ("지각 5분전" 타이틀 닫고 인게임 시작)
+            if (!_hasMovedAtLeastOnce)
+            {
+                _hasMovedAtLeastOnce = true;
+                GameEvents.TriggerGameStarted();
+                GameEvents.TriggerGameStateChanged(GameState.Playing);
+            }
+
             _idleTimer = 0f; // 이동 시 활동 타이머 리셋
 
             // 기존에 타고 있던 널판지가 있다면 탑승 해제 (새로운 칸으로 도약)

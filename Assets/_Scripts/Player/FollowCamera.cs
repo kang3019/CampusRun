@@ -29,17 +29,17 @@ namespace CampusRun.Player
         [Tooltip("추격할 플레이어의 Transform (비어있으면 자동 탐색)")]
         [SerializeField] private Transform _target;
 
-        [Tooltip("플레이어 기준 카메라의 상대 위치 (기본: X=-4.8, Y=7.8, Z=-8.2)")]
-        [SerializeField] private Vector3 _offset = new Vector3(-4.8f, 7.8f, -8.2f);
+        [Tooltip("플레이어 기준 카메라의 상대 위치 (기본: X=-3.8, Y=6.4, Z=-6.8)")]
+        [SerializeField] private Vector3 _offset = new Vector3(-3.8f, 6.4f, -6.8f);
 
         [Header("--- 카메라 시점 각도 (눈높이 조절) ---")]
-        [Tooltip("상하 내려다보는 각도 (작을수록 눈높이에 가까워짐, 기본: 38도)")]
+        [Tooltip("상하 내려다보는 각도 (작을수록 눈높이에 가까워짐, 기본: 36도)")]
         [Range(15f, 60f)]
-        [SerializeField] private float _pitchAngle = 38f;
+        [SerializeField] private float _pitchAngle = 36f;
 
-        [Tooltip("좌우 회전 각도 (IsometricLeft: 25도, Straight: 0도)")]
+        [Tooltip("좌우 회전 각도 (IsometricLeft: 24도, Straight: 0도)")]
         [Range(-60f, 60f)]
-        [SerializeField] private float _yawAngle = 25f;
+        [SerializeField] private float _yawAngle = 24f;
 
         [Header("--- 추격 부드러움 (Damping) ---")]
         [Tooltip("카메라 추격 지연 시간(초) - 작을수록 즉각 반응")]
@@ -118,18 +118,18 @@ namespace CampusRun.Player
             switch (_viewMode)
             {
                 case CameraViewMode.IsometricLeft:
-                    _offset = new Vector3(-4.8f, 7.8f, -8.2f);
-                    _pitchAngle = 38f;
-                    _yawAngle = 25f;
+                    _offset = new Vector3(-3.8f, 6.4f, -6.8f);
+                    _pitchAngle = 36f;
+                    _yawAngle = 24f;
                     break;
                 case CameraViewMode.IsometricRight:
-                    _offset = new Vector3(4.8f, 7.8f, -8.2f);
-                    _pitchAngle = 38f;
-                    _yawAngle = -25f;
+                    _offset = new Vector3(3.8f, 6.4f, -6.8f);
+                    _pitchAngle = 36f;
+                    _yawAngle = -24f;
                     break;
                 case CameraViewMode.Straight:
-                    _offset = new Vector3(0f, 7.5f, -8.5f);
-                    _pitchAngle = 36f;
+                    _offset = new Vector3(0f, 6.2f, -7.0f);
+                    _pitchAngle = 35f;
                     _yawAngle = 0f;
                     break;
                 case CameraViewMode.Custom:
