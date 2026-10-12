@@ -40,9 +40,9 @@ namespace CampusRun.Track
         [Tooltip("일반 도로 점선 차선 그룹")]
         [SerializeField] private GameObject _standardDashesGroup;
 
-        [Tooltip("이 도로에 횡단보도가 등장할 확률 (기본 0.3 = 30% 확률)")]
+        [Tooltip("이 도로에 횡단보도가 등장할 확률 (기본 0.25 = 25% 확률)")]
         [Range(0f, 1f)]
-        [SerializeField] private float _crosswalkChance = 0.3f;
+        [SerializeField] private float _crosswalkChance = 0.25f;
 
         // 런타임 상태 변수
         private float _currentDirection = 1f;
@@ -117,17 +117,6 @@ namespace CampusRun.Track
                     actionOnGet: (vehicle) => { },
                     actionOnRelease: (vehicle) => { if (vehicle != null) vehicle.gameObject.SetActive(false); },
                     actionOnDestroy: (vehicle) => { if (vehicle != null) Destroy(vehicle.gameObject); },
-                    collectionCheck: true,
-                    defaultCapacity: 3,
-                    maxSize: 10
-                    actionOnRelease: (vehicle) =>
-                    {
-                        if (vehicle != null) vehicle.gameObject.SetActive(false);
-                    },
-                    actionOnDestroy: (vehicle) =>
-                    {
-                        if (vehicle != null) Destroy(vehicle.gameObject);
-                    },
                     collectionCheck: false,
                     defaultCapacity: 5,
                     maxSize: 20
@@ -145,18 +134,12 @@ namespace CampusRun.Track
 
         private void OnEnable()
         {
-            CampusRun.Core.GameEvents.OnGameRestarted += HandleGameRestarted;
+            CampusRun.Core.GameEvents.OnGameRestarted += ClearSharedPools;
         }
 
         private void OnDisable()
         {
-            CampusRun.Core.GameEvents.OnGameRestarted -= HandleGameRestarted;
-        }
-
-        private static void HandleGameRestarted()
-        {
-            _sharedVehiclePools.Clear();
-            _vehicleRootContainer = null;
+            CampusRun.Core.GameEvents.OnGameRestarted -= ClearSharedPools;
         }
 
         /// <summary>
@@ -256,42 +239,32 @@ namespace CampusRun.Track
 
             if (prefabName.Contains("Taxi"))
             {
-                // 캠퍼스 총알 택시: 1교시 지각생을 태우고 쏜살같이 질주 (속도 11.0~13.5m/s, 창문 3.5~5.0s)
+                // 캠퍼스 총알 택시: 1교시 지각생을 태우고 쏜살같이 질주 (속도 11.0~13.5m/s, 창문 2.8~4.2s)
                 _currentSpeed = Random.Range(11.0f, 13.5f);
-                _currentMinClearWindow = 3.5f;
-                _currentMaxClearWindow = 5.0f;
+                _currentMinClearWindow = 2.8f;
+                _currentMaxClearWindow = 4.2f;
             }
             else if (prefabName.Contains("Truck"))
             {
-                // 택배/생협 1톤 탑차: 묵직하고 느긋하게 주행 (속도 6.8~8.8m/s, 창문 4.2~6.0s)
+                // 택배/생협 1톤 탑차: 묵직하고 느긋하게 주행 (속도 6.8~8.8m/s, 창문 3.4~4.8s)
                 _currentSpeed = Random.Range(6.8f, 8.8f);
-                _currentMinClearWindow = 4.2f;
-                _currentMaxClearWindow = 6.0f;
+                _currentMinClearWindow = 3.4f;
+                _currentMaxClearWindow = 4.8f;
             }
             else if (prefabName.Contains("Sedan") || prefabName.Contains("Car"))
             {
-                // 학생/교직원 세단 승용차: 경쾌하고 표준적인 주행 (속도 8.8~11.2m/s, 창문 3.8~5.5s)
+                // 학생/교직원 세단 승용차: 경쾌하고 표준적인 주행 (속도 8.8~11.2m/s, 창문 3.0~4.5s)
                 _currentSpeed = Random.Range(8.8f, 11.2f);
-                _currentMinClearWindow = 3.8f;
-                _currentMaxClearWindow = 5.5f;
+                _currentMinClearWindow = 3.0f;
+                _currentMaxClearWindow = 4.5f;
             }
             else
             {
-                // 대형 셔틀버스: 차체가 길고 묵직함 (속도 7.5~9.5m/s, 창문 4.5~6.5s)
+                // 대형 셔틀버스: 차체가 길고 묵직함 (속도 7.5~9.5m/s, 창문 3.5~5.0s)
                 _currentSpeed = Random.Range(_minSpeed, _maxSpeed);
                 _currentMinClearWindow = _minClearWindow;
                 _currentMaxClearWindow = _maxClearWindow;
             }
-        }
-
-        private void OnEnable()
-        {
-            CampusRun.Core.GameEvents.OnGameRestarted += ClearSharedPools;
-        }
-
-        private void OnDisable()
-        {
-            CampusRun.Core.GameEvents.OnGameRestarted -= ClearSharedPools;
         }
 
         protected override void OnLaneRecycled()
@@ -322,8 +295,8 @@ namespace CampusRun.Track
         private IEnumerator VehicleSpawnRoutine()
         {
             // 1. 레인 생성 직후 초기 시차 분산:
-            // 인접한 도로끼리 동시에 차가 튀어나와 통행을 막지 않도록 Z 인덱스 기반 시차 부여
-            float initialPhaseDelay = ((Mathf.Abs(LaneZIndex) * 2.3f) % 3.5f) + Random.Range(0.6f, 2.0f);
+            // 인접한 도로끼리 동시에 차가 튀어나와 통행을 막지 않도록 Z 인덱스 기반 시차 부여 (0.3초 ~ 2.2초)
+            float initialPhaseDelay = ((Mathf.Abs(LaneZIndex) * 1.5f) % 1.8f) + Random.Range(0.2f, 0.6f);
             yield return new WaitForSeconds(initialPhaseDelay);
 
             while (true)

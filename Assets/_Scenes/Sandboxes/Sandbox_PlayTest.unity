@@ -876,7 +876,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CampusRun.Track.LaneManager
   _safeLanePrefab: {fileID: 7883880905502760396, guid: b2b345ea7f213384195bfa01fe7d9fcd, type: 3}
-  _roadLanePrefab: {fileID: 771072547989169011, guid: 37f4339c245f9ec45936bc471939d9e9, type: 3}
+  _roadLanePrefab: {fileID: 726817409581458, guid: 37f4339c245f9ec45936bc471939d9e9, type: 3}
   _motorcycleLanePrefab: {fileID: 6000000000000001, guid: 8df10326afdf4433b404b4069584bcb2, type: 3}
   _waterLanePrefab: {fileID: 7883880905502760396, guid: 4a9911e4f02a4b88950c4821a733ef02, type: 3}
   _initialSafeLaneCount: 6

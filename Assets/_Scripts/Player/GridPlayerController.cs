@@ -618,7 +618,7 @@ namespace CampusRun.Player
             {
                 if (_drownCoroutine != null) StopCoroutine(_drownCoroutine);
                 _drownCoroutine = StartCoroutine(DrownRoutine());
-                Die("🚧 공사 현장 흙탕물 웅덩이에 빠져 신발이 벗겨지는 바람에 1교시 지각했습니다!");
+                Die("🌊 비 온 뒤 거대 물웅덩이에 빠져 지각 탈락했습니다!");
             }
         }
 
