@@ -69,7 +69,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CampusRun.Obstacles.MovingVehicle
   _direction: 1
   _speed: 9.5
-  _despawnBoundaryX: 15.5
+  _despawnBoundaryX: 28
 --- !u!1 &1000000000000002
 GameObject:
   m_ObjectHideFlags: 0

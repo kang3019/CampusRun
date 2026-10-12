@@ -12,8 +12,8 @@ namespace CampusRun.Obstacles
     public class FloatingPlank : MonoBehaviour
     {
         [Header("--- 이동 및 경계 설정 ---")]
-        [Tooltip("경계를 벗어나면 풀로 반환될 X축 한계 좌표")]
-        [SerializeField] private float _despawnBoundaryX = 14f;
+        [Tooltip("경계를 벗어나면 풀로 반환될 X축 한계 좌표 (하천 폭 60m 기준 ±28.0m)")]
+        [SerializeField] private float _despawnBoundaryX = 28.0f;
 
         [Tooltip("널판지의 길이(X축 크기)")]
         [SerializeField] private float _plankLength = 2.2f;

@@ -32,7 +32,7 @@ namespace CampusRun.EditorTools
         private const string MatScaffoldDarkPath = MaterialsDir + "/M_Scaffold_Dark.mat";
         private const string MatSafetyYellowPath = MaterialsDir + "/M_Safety_Yellow.mat";
 
-        private const string PrefsKey = "CampusRun_KoreanStreetSetup_Executed_v9";
+        private const string PrefsKey = "CampusRun_KoreanStreetSetup_Executed_v11";
 
         // 프리팹 경로
         private const string SafeLanePrefabPath = PrefabsEnvDir + "/PF_SafeLane.prefab";
@@ -42,6 +42,7 @@ namespace CampusRun.EditorTools
         private const string KickboardPrefabPath = PrefabsObsDir + "/PF_Kickboard.prefab";
         private const string StreetLightPrefabPath = PrefabsEnvDir + "/PF_StreetLight.prefab";
         private const string FloatingPlankPrefabPath = PrefabsObsDir + "/PF_FloatingPlank.prefab";
+        private const string TreePrefabPath = PrefabsObsDir + "/PF_Tree.prefab";
 
         [InitializeOnLoadMethod]
         private static void AutoRunOnCompile()
@@ -51,8 +52,35 @@ namespace CampusRun.EditorTools
                 EditorPrefs.SetBool(PrefsKey, true);
                 EditorApplication.delayCall += () =>
                 {
+                    ImportAndApplyPixelFont();
                     SetupKoreanStreetTheme();
                 };
+            }
+        }
+
+        [MenuItem("CampusRun/도트 폰트(Neo둥근모) 임포트 및 적용")]
+        public static void ImportAndApplyPixelFont()
+        {
+            AssetDatabase.Refresh();
+
+            string[] paths = new string[]
+            {
+                "Assets/Resources/Fonts/neodgm.ttf",
+                "Assets/Fonts/neodgm.ttf"
+            };
+
+            foreach (string p in paths)
+            {
+                if (File.Exists(p))
+                {
+                    AssetDatabase.ImportAsset(p, ImportAssetOptions.ForceUpdate);
+                    Font font = AssetDatabase.LoadAssetAtPath<Font>(p);
+                    if (font != null && font.material != null && font.material.mainTexture != null)
+                    {
+                        font.material.mainTexture.filterMode = FilterMode.Point;
+                    }
+                    Debug.Log($"[KoreanStreetSetupTool] 도트 폰트({p}) 임포트 완료: {(font != null ? font.name : "null")}");
+                }
             }
         }
 
@@ -224,6 +252,8 @@ namespace CampusRun.EditorTools
                 Object.DestroyImmediate(safeRoot.transform.GetChild(i).gameObject);
             }
 
+            safeRoot.transform.localScale = new Vector3(60f, 0.2f, 1f);
+
             MeshRenderer mr = safeRoot.GetComponent<MeshRenderer>();
             if (mr != null) mr.sharedMaterial = matSidewalk;
 
@@ -234,7 +264,9 @@ namespace CampusRun.EditorTools
             curbFront.name = "Curb_Front";
             curbFront.transform.SetParent(curbGroup.transform, false);
             Object.DestroyImmediate(curbFront.GetComponent<Collider>());
-            curbFront.GetComponent<MeshRenderer>().sharedMaterial = matCurb;
+            MeshRenderer mrFront = curbFront.GetComponent<MeshRenderer>();
+            mrFront.sharedMaterial = matCurb;
+            mrFront.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             curbFront.transform.localPosition = new Vector3(0f, 0.52f, 0.465f);
             curbFront.transform.localScale = new Vector3(1f, 0.22f, 0.07f);
 
@@ -242,7 +274,9 @@ namespace CampusRun.EditorTools
             curbBack.name = "Curb_Back";
             curbBack.transform.SetParent(curbGroup.transform, false);
             Object.DestroyImmediate(curbBack.GetComponent<Collider>());
-            curbBack.GetComponent<MeshRenderer>().sharedMaterial = matCurb;
+            MeshRenderer mrBack = curbBack.GetComponent<MeshRenderer>();
+            mrBack.sharedMaterial = matCurb;
+            mrBack.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             curbBack.transform.localPosition = new Vector3(0f, 0.52f, -0.465f);
             curbBack.transform.localScale = new Vector3(1f, 0.22f, 0.07f);
 
@@ -253,7 +287,9 @@ namespace CampusRun.EditorTools
             brailleLine.name = "Braille_Line";
             brailleLine.transform.SetParent(brailleGroup.transform, false);
             Object.DestroyImmediate(brailleLine.GetComponent<Collider>());
-            brailleLine.GetComponent<MeshRenderer>().sharedMaterial = matBraille;
+            MeshRenderer mrBraille = brailleLine.GetComponent<MeshRenderer>();
+            mrBraille.sharedMaterial = matBraille;
+            mrBraille.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             brailleLine.transform.localPosition = new Vector3(0f, 0.515f, 0.25f);
             brailleLine.transform.localScale = new Vector3(1f, 0.06f, 0.25f);
 
@@ -272,15 +308,18 @@ namespace CampusRun.EditorTools
                 so.FindProperty("_streetLightSpawnChance").floatValue = 0.12f;
 
                 GameObject kickboardPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(KickboardPrefabPath);
+                GameObject treePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(TreePrefabPath);
                 StationaryObstacle kickObs = kickboardPrefab != null ? kickboardPrefab.GetComponent<StationaryObstacle>() : null;
                 StationaryObstacle bollardObs = bollardPrefab != null ? bollardPrefab.GetComponent<StationaryObstacle>() : null;
+                StationaryObstacle treeObs = treePrefab != null ? treePrefab.GetComponent<StationaryObstacle>() : null;
 
                 SerializedProperty obsListProp = so.FindProperty("_obstaclePrefabs");
-                if (kickObs != null && bollardObs != null)
+                if (kickObs != null && bollardObs != null && treeObs != null)
                 {
-                    obsListProp.arraySize = 2;
+                    obsListProp.arraySize = 3;
                     obsListProp.GetArrayElementAtIndex(0).objectReferenceValue = kickObs;
                     obsListProp.GetArrayElementAtIndex(1).objectReferenceValue = bollardObs;
+                    obsListProp.GetArrayElementAtIndex(2).objectReferenceValue = treeObs;
                 }
 
                 so.ApplyModifiedProperties();
@@ -289,6 +328,20 @@ namespace CampusRun.EditorTools
             PrefabUtility.SaveAsPrefabAsset(safeRoot, SafeLanePrefabPath);
             PrefabUtility.UnloadPrefabContents(safeRoot);
             Debug.Log("[KoreanStreetSetupTool] PF_SafeLane.prefab 재구성 완료!");
+        }
+
+        private static GameObject CreateFloorDecorationCube(string name, Transform parent, Material mat, Vector3 localPos, Vector3 localScale)
+        {
+            GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            cube.name = name;
+            cube.transform.SetParent(parent, false);
+            Object.DestroyImmediate(cube.GetComponent<Collider>());
+            MeshRenderer mr = cube.GetComponent<MeshRenderer>();
+            mr.sharedMaterial = mat;
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            cube.transform.localPosition = localPos;
+            cube.transform.localScale = localScale;
+            return cube;
         }
 
         private static void RebuildRoadLanePrefab(Material matCrosswalk, Material matRoadMarking)
@@ -301,7 +354,9 @@ namespace CampusRun.EditorTools
                 Object.DestroyImmediate(roadRoot.transform.GetChild(i).gameObject);
             }
 
-            float invX = 1f / 20f;
+            roadRoot.transform.localScale = new Vector3(60f, 0.2f, 1f);
+
+            float invX = 1f / 60f;
             float invY = 1f / 0.2f;
 
             GameObject crosswalkGroup = new GameObject("CrosswalkGroup");
@@ -321,33 +376,24 @@ namespace CampusRun.EditorTools
             for (int idx = 0; idx < crosswalkZ.Length; idx++)
             {
                 float wz = crosswalkZ[idx];
-                GameObject stripe = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                stripe.name = $"Stripe_{idx + 1}";
-                stripe.transform.SetParent(varStraight.transform, false);
-                Object.DestroyImmediate(stripe.GetComponent<Collider>());
-                stripe.GetComponent<MeshRenderer>().sharedMaterial = matCrosswalk;
-                stripe.transform.localPosition = new Vector3(0f, 0.52f, wz);
-                stripe.transform.localScale = new Vector3(3.6f * invX, stripeHeight, stripeThickness);
+                CreateFloorDecorationCube($"Stripe_{idx + 1}", varStraight.transform, matCrosswalk,
+                    new Vector3(0f, 0.52f, wz),
+                    new Vector3(3.6f * invX, stripeHeight, stripeThickness));
             }
 
             // --- 변형 2: 좌사선 대각선 스트라이프 8줄 ---
-            // (부모 스케일 20:0.2:1 왜곡을 방지하기 위해 Z위치에 따라 X좌표를 점진 오프셋)
             GameObject varDiagLeft = new GameObject("Variant_Diagonal_Left");
             varDiagLeft.transform.SetParent(crosswalkGroup.transform, false);
             for (int idx = 0; idx < crosswalkZ.Length; idx++)
             {
                 float wz = crosswalkZ[idx];
                 float norm = (float)idx / (crosswalkZ.Length - 1) - 0.5f; // -0.5 ~ +0.5
-                float shiftX = -norm * 1.5f; // 앞(+Z)으로 갈수록 왼쪽(-X)으로 이동
-                GameObject stripe = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                stripe.name = $"Stripe_DiagL_{idx + 1}";
-                stripe.transform.SetParent(varDiagLeft.transform, false);
-                Object.DestroyImmediate(stripe.GetComponent<Collider>());
-                stripe.GetComponent<MeshRenderer>().sharedMaterial = matCrosswalk;
-                stripe.transform.localPosition = new Vector3(shiftX * invX, 0.52f, wz);
-                stripe.transform.localScale = new Vector3(3.2f * invX, stripeHeight, stripeThickness);
+                float shiftX = -norm * 1.5f;
+                CreateFloorDecorationCube($"Stripe_DiagL_{idx + 1}", varDiagLeft.transform, matCrosswalk,
+                    new Vector3(shiftX * invX, 0.52f, wz),
+                    new Vector3(3.2f * invX, stripeHeight, stripeThickness));
             }
-            varDiagLeft.SetActive(false); // 런타임에 RoadLane에서 랜덤 활성화
+            varDiagLeft.SetActive(false);
 
             // --- 변형 3: 우사선 대각선 스트라이프 8줄 ---
             GameObject varDiagRight = new GameObject("Variant_Diagonal_Right");
@@ -356,14 +402,10 @@ namespace CampusRun.EditorTools
             {
                 float wz = crosswalkZ[idx];
                 float norm = (float)idx / (crosswalkZ.Length - 1) - 0.5f; // -0.5 ~ +0.5
-                float shiftX = norm * 1.5f; // 앞(+Z)으로 갈수록 오른쪽(+X)으로 이동
-                GameObject stripe = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                stripe.name = $"Stripe_DiagR_{idx + 1}";
-                stripe.transform.SetParent(varDiagRight.transform, false);
-                Object.DestroyImmediate(stripe.GetComponent<Collider>());
-                stripe.GetComponent<MeshRenderer>().sharedMaterial = matCrosswalk;
-                stripe.transform.localPosition = new Vector3(shiftX * invX, 0.52f, wz);
-                stripe.transform.localScale = new Vector3(3.2f * invX, stripeHeight, stripeThickness);
+                float shiftX = norm * 1.5f;
+                CreateFloorDecorationCube($"Stripe_DiagR_{idx + 1}", varDiagRight.transform, matCrosswalk,
+                    new Vector3(shiftX * invX, 0.52f, wz),
+                    new Vector3(3.2f * invX, stripeHeight, stripeThickness));
             }
             varDiagRight.SetActive(false);
 
@@ -373,23 +415,12 @@ namespace CampusRun.EditorTools
             for (int idx = 0; idx < crosswalkZ.Length; idx++)
             {
                 float wz = crosswalkZ[idx];
-                // 좌측 통로
-                GameObject leftStripe = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                leftStripe.name = $"Stripe_L_{idx + 1}";
-                leftStripe.transform.SetParent(varDual.transform, false);
-                Object.DestroyImmediate(leftStripe.GetComponent<Collider>());
-                leftStripe.GetComponent<MeshRenderer>().sharedMaterial = matCrosswalk;
-                leftStripe.transform.localPosition = new Vector3(-2.2f * invX, 0.52f, wz);
-                leftStripe.transform.localScale = new Vector3(1.8f * invX, stripeHeight, stripeThickness);
-
-                // 우측 통로
-                GameObject rightStripe = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                rightStripe.name = $"Stripe_R_{idx + 1}";
-                rightStripe.transform.SetParent(varDual.transform, false);
-                Object.DestroyImmediate(rightStripe.GetComponent<Collider>());
-                rightStripe.GetComponent<MeshRenderer>().sharedMaterial = matCrosswalk;
-                rightStripe.transform.localPosition = new Vector3(2.2f * invX, 0.52f, wz);
-                rightStripe.transform.localScale = new Vector3(1.8f * invX, stripeHeight, stripeThickness);
+                CreateFloorDecorationCube($"Stripe_L_{idx + 1}", varDual.transform, matCrosswalk,
+                    new Vector3(-2.2f * invX, 0.52f, wz),
+                    new Vector3(1.8f * invX, stripeHeight, stripeThickness));
+                CreateFloorDecorationCube($"Stripe_R_{idx + 1}", varDual.transform, matCrosswalk,
+                    new Vector3(2.2f * invX, 0.52f, wz),
+                    new Vector3(1.8f * invX, stripeHeight, stripeThickness));
             }
             varDual.SetActive(false);
 
@@ -399,29 +430,21 @@ namespace CampusRun.EditorTools
             for (int idx = 0; idx < crosswalkZ.Length; idx++)
             {
                 float wz = crosswalkZ[idx];
-                GameObject stripe = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                stripe.name = $"Stripe_Wide_{idx + 1}";
-                stripe.transform.SetParent(varWide.transform, false);
-                Object.DestroyImmediate(stripe.GetComponent<Collider>());
-                stripe.GetComponent<MeshRenderer>().sharedMaterial = matCrosswalk;
-                stripe.transform.localPosition = new Vector3(0f, 0.52f, wz);
-                stripe.transform.localScale = new Vector3(5.2f * invX, stripeHeight, stripeThickness);
+                CreateFloorDecorationCube($"Stripe_Wide_{idx + 1}", varWide.transform, matCrosswalk,
+                    new Vector3(0f, 0.52f, wz),
+                    new Vector3(5.2f * invX, stripeHeight, stripeThickness));
             }
             varWide.SetActive(false);
 
             GameObject dashesGroup = new GameObject("StandardDashesGroup");
             dashesGroup.transform.SetParent(roadRoot.transform, false);
 
-            float[] dashPositionsX = new float[] { -0.35f, -0.175f, 0f, 0.175f, 0.35f };
-            foreach (float px in dashPositionsX)
+            float[] dashWorldPositionsX = new float[] { -21.6f, -18f, -14.4f, -10.8f, -7.2f, -3.6f, 0f, 3.6f, 7.2f, 10.8f, 14.4f, 18f, 21.6f };
+            foreach (float wx in dashWorldPositionsX)
             {
-                GameObject dash = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                dash.name = $"Dash_{px:F3}";
-                dash.transform.SetParent(dashesGroup.transform, false);
-                Object.DestroyImmediate(dash.GetComponent<Collider>());
-                dash.GetComponent<MeshRenderer>().sharedMaterial = matRoadMarking;
-                dash.transform.localPosition = new Vector3(px, 0.515f, 0f);
-                dash.transform.localScale = new Vector3(1.4f * invX, 0.03f * invY, 0.15f);
+                CreateFloorDecorationCube($"Dash_{wx:F1}", dashesGroup.transform, matRoadMarking,
+                    new Vector3(wx * invX, 0.515f, 0f),
+                    new Vector3(1.4f * invX, 0.03f * invY, 0.15f));
             }
 
             RoadLane roadScript = roadRoot.GetComponent<RoadLane>();
@@ -449,6 +472,8 @@ namespace CampusRun.EditorTools
             GameObject waterRoot = PrefabUtility.LoadPrefabContents(WaterLanePrefabPath);
             if (waterRoot != null)
             {
+                waterRoot.transform.localScale = new Vector3(60f, 0.12f, 1f);
+
                 MeshRenderer mr = waterRoot.GetComponent<MeshRenderer>();
                 if (mr != null) mr.sharedMaterial = matWetCement;
 

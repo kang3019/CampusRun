@@ -125,5 +125,5 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5d18a24c901e4796a782b1c430e8fa91, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CampusRun.Obstacles.FloatingPlank
-  _despawnBoundaryX: 14
+  _despawnBoundaryX: 28
   _plankLength: 2.2

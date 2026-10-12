@@ -14,8 +14,8 @@ namespace CampusRun.Obstacles
         [Tooltip("기본 초고속 이동 속도 (m/s)")]
         [SerializeField] private float _rushSpeed = 30f;
 
-        [Tooltip("레인 중심 기준 비활성화되는 X축 경계선")]
-        [SerializeField] private float _despawnBoundaryX = 18f;
+        [Tooltip("레인 중심 기준 비활성화되는 X축 경계선 (도로 폭 60m 기준 ±30.0m)")]
+        [SerializeField] private float _despawnBoundaryX = 30.0f;
 
         // 런타임 상태 변수 (GC 할당 방지)
         private float _direction = 1f;

@@ -30,8 +30,8 @@ namespace CampusRun.Track
         [SerializeField] private float _minClearWindow = 4.2f;
         [SerializeField] private float _maxClearWindow = 6.8f;
 
-        [Tooltip("스폰 시작 X축 좌표 (도로 폭 20m 기준 ±14.5m)")]
-        [SerializeField] private float _spawnBoundaryX = 14.5f;
+        [Tooltip("스폰 시작 X축 좌표 (도로 폭 60m 기준 ±26.0m)")]
+        [SerializeField] private float _spawnBoundaryX = 26.0f;
 
         [Header("--- 횡단보도 및 도로 표식 설정 ---")]
         [Tooltip("횡단보도 장식 그룹 (지브라 스트라이프 + 정지선)")]
@@ -197,7 +197,7 @@ namespace CampusRun.Track
             // 1. 위치(X축 좌/우/중앙) 다양화: 중앙, 약간 좌측, 약간 우측, 좌측 끝, 우측 끝
             float[] possibleOffsetsX = new float[] { 0f, -2.0f, 2.0f, -3.5f, 3.5f };
             float chosenOffsetX = possibleOffsetsX[Random.Range(0, possibleOffsetsX.Length)];
-            float invX = 1f / 20f;
+            float invX = 1f / Mathf.Max(0.001f, transform.localScale.x);
             _crosswalkGroup.transform.localPosition = new Vector3(chosenOffsetX * invX, 0f, 0f);
 
             // 2. 여러 방향/스타일 변형(정방향, 좌사선, 우사선, 듀얼 통로) 중 1개 선택 활성화

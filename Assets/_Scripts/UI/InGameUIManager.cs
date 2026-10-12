@@ -39,10 +39,29 @@ namespace CampusRun.UI
         [Tooltip("다시하기 버튼")]
         [SerializeField] private Button _retryButton;
 
+        [Header("--- 게임 시작 화면 (지각 5분전) ---")]
+        [Tooltip("게임 시작 전 표시될 타이틀 화면 패널")]
+        [SerializeField] private GameObject _titleScreenPanel;
+
+        [Tooltip("타이틀 텍스트 (지각 5분전)")]
+        [SerializeField] private Text _titleText;
+
+        [Tooltip("조작 안내 프롬프트 텍스트 (방향키를 눌러 시작)")]
+        [SerializeField] private Text _startPromptText;
+
+        [Tooltip("조작 키 가이드 텍스트")]
+        [SerializeField] private Text _keyGuideText;
+
+        [Header("--- 폰트 설정 ---")]
+        [Tooltip("레트로 도트 폰트 (미지정 시 Resources/Fonts/neodgm 자동 로드)")]
+        [SerializeField] private Font _pixelFont;
+
         private const string HighScoreKey = "CampusRun_HighScore";
         private int _currentScore = 0;
         private bool _isGameOver = false;
+        private bool _isGameStarted = false;
         private Coroutine _warningBlinkRoutine;
+        private Coroutine _promptPulseRoutine;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void AutoInitializeInScene()
@@ -80,10 +99,24 @@ namespace CampusRun.UI
                 _retryButton.onClick.RemoveAllListeners();
                 _retryButton.onClick.AddListener(OnRetryButtonClicked);
             }
+
+            // 시작 화면 활성화 및 점수 HUD 대기 상태 초기화
+            _isGameStarted = false;
+            if (_titleScreenPanel != null)
+            {
+                _titleScreenPanel.SetActive(true);
+            }
+            if (_scoreText != null)
+            {
+                _scoreText.gameObject.SetActive(false);
+            }
+            StartPromptPulse();
         }
 
         private void OnEnable()
         {
+            GameEvents.OnGameStarted += HandleGameStarted;
+            GameEvents.OnGameRestarted += HandleGameRestarted;
             GameEvents.OnScoreChanged += UpdateScoreDisplay;
             GameEvents.OnPlayerDied += ShowGameOverPanel;
             GameEvents.OnInactivityWarning += HandleInactivityWarning;
@@ -92,6 +125,8 @@ namespace CampusRun.UI
 
         private void OnDisable()
         {
+            GameEvents.OnGameStarted -= HandleGameStarted;
+            GameEvents.OnGameRestarted -= HandleGameRestarted;
             GameEvents.OnScoreChanged -= UpdateScoreDisplay;
             GameEvents.OnPlayerDied -= ShowGameOverPanel;
             GameEvents.OnInactivityWarning -= HandleInactivityWarning;
@@ -143,17 +178,56 @@ namespace CampusRun.UI
         }
 
         /// <summary>
-        /// 씬에 UI Canvas가 없을 경우 100% 안전하게 내장 폰트를 활용한 점수 HUD 및 게임오버 패널을 자동 생성합니다.
+        /// 도트/픽셀 폰트를 반환합니다. (Resources -> AssetDatabase -> 내장 폰트 순으로 폴백)
         /// </summary>
-        private void EnsureHUDAndGameOverUI()
+        private Font GetEffectivePixelFont()
         {
-            if (_scoreText != null && _gameOverPanel != null) return;
+            if (_pixelFont != null) return _pixelFont;
 
+            // 1. Resources에서 neodgm 폰트 로드 시도
+            _pixelFont = Resources.Load<Font>("Fonts/neodgm");
+            if (_pixelFont != null) return _pixelFont;
+
+#if UNITY_EDITOR
+            // 2. 에디터 환경에서 AssetDatabase를 통한 로드 시도
+            _pixelFont = UnityEditor.AssetDatabase.LoadAssetAtPath<Font>("Assets/Resources/Fonts/neodgm.ttf");
+            if (_pixelFont == null)
+            {
+                _pixelFont = UnityEditor.AssetDatabase.LoadAssetAtPath<Font>("Assets/Fonts/neodgm.ttf");
+            }
+            if (_pixelFont != null) return _pixelFont;
+#endif
+
+            // 3. 폴백: 기본 내장 폰트
             Font defaultFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             if (defaultFont == null)
             {
                 defaultFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
             }
+            return defaultFont;
+        }
+
+        /// <summary>
+        /// 도트 폰트의 글리프 텍스처를 Point 필터링으로 설정하여 픽셀의 선명한 칼각을 살립니다.
+        /// </summary>
+        private void ConfigurePixelFontTexture(Font font)
+        {
+            if (font == null) return;
+            if (font.material != null && font.material.mainTexture != null)
+            {
+                font.material.mainTexture.filterMode = FilterMode.Point;
+            }
+        }
+
+        /// <summary>
+        /// 씬에 UI Canvas가 없을 경우 100% 안전하게 도트 폰트를 활용한 점수 HUD 및 게임오버 패널을 자동 생성합니다.
+        /// </summary>
+        private void EnsureHUDAndGameOverUI()
+        {
+            if (_scoreText != null && _gameOverPanel != null && _titleScreenPanel != null) return;
+
+            Font defaultFont = GetEffectivePixelFont();
+            ConfigurePixelFontTexture(defaultFont);
 
             // 1. Canvas 생성 또는 탐색
             Canvas canvas = FindAnyObjectByType<Canvas>();
@@ -188,7 +262,7 @@ namespace CampusRun.UI
                 _scoreText = scoreObj.AddComponent<Text>();
                 _scoreText.font = defaultFont;
                 _scoreText.fontSize = 76;
-                _scoreText.fontStyle = FontStyle.Bold;
+                _scoreText.fontStyle = FontStyle.Normal;
                 _scoreText.color = Color.white;
                 _scoreText.alignment = TextAnchor.UpperRight;
                 _scoreText.text = "0 m";
@@ -366,6 +440,242 @@ namespace CampusRun.UI
                 btnText.text = "다시 하기 (R)";
 
                 _gameOverPanel.SetActive(false);
+            }
+
+            // 5. 게임 시작 화면 (지각 5분전 타이틀 및 방향키 조작 안내)
+            EnsureTitleScreenUI(canvas, defaultFont);
+        }
+
+        /// <summary>
+        /// "지각 5분전" 타이틀 화면 및 방향키 출발 안내 UI를 생성합니다.
+        /// </summary>
+        private void EnsureTitleScreenUI(Canvas canvas, Font defaultFont)
+        {
+            if (_titleScreenPanel != null) return;
+
+            Transform existing = canvas.transform.Find("TitleScreen_Panel");
+            if (existing != null)
+            {
+                _titleScreenPanel = existing.gameObject;
+                _titleText = _titleScreenPanel.transform.Find("MainTitle_Text")?.GetComponent<Text>();
+                _startPromptText = _titleScreenPanel.transform.Find("StartPrompt_Text")?.GetComponent<Text>();
+                _keyGuideText = _titleScreenPanel.transform.Find("KeyGuide_Box/KeyGuide_Text")?.GetComponent<Text>();
+                return;
+            }
+
+            // [타이틀 화면 루트 패널]
+            GameObject titlePanelObj = new GameObject("TitleScreen_Panel");
+            titlePanelObj.transform.SetParent(canvas.transform, false);
+
+            RectTransform panelRect = titlePanelObj.AddComponent<RectTransform>();
+            panelRect.anchorMin = new Vector2(0.5f, 0.5f);
+            panelRect.anchorMax = new Vector2(0.5f, 0.5f);
+            panelRect.pivot = new Vector2(0.5f, 0.5f);
+            panelRect.anchoredPosition = new Vector2(0f, 40f);
+            panelRect.sizeDelta = new Vector2(900f, 500f);
+            titlePanelObj.transform.localScale = new Vector3(0.9f, 0.9f, 0.9f);
+
+            _titleScreenPanel = titlePanelObj;
+
+            // 1. 캠퍼스 런 상단 뱃지 라벨
+            GameObject badgeObj = new GameObject("Badge_Text");
+            badgeObj.transform.SetParent(titlePanelObj.transform, false);
+            RectTransform badgeRect = badgeObj.AddComponent<RectTransform>();
+            badgeRect.anchoredPosition = new Vector2(0f, 155f);
+            badgeRect.sizeDelta = new Vector2(600f, 40f);
+            Text badgeText = badgeObj.AddComponent<Text>();
+            badgeText.font = defaultFont;
+            badgeText.fontSize = 22;
+            badgeText.fontStyle = FontStyle.Bold;
+            badgeText.color = new Color(1f, 0.72f, 0.22f); // 따뜻한 골드 오렌지
+            badgeText.alignment = TextAnchor.MiddleCenter;
+            badgeText.text = "⚡ CAMPUS SURVIVAL RUN ⚡";
+            Shadow badgeShadow = badgeObj.AddComponent<Shadow>();
+            badgeShadow.effectColor = new Color(0f, 0f, 0f, 0.9f);
+            badgeShadow.effectDistance = new Vector2(2f, -2f);
+
+            // 2. 메인 타이틀: "지각 5분전!!" (레트로 도트 폰트 적용)
+            GameObject mainTitleObj = new GameObject("MainTitle_Text");
+            mainTitleObj.transform.SetParent(titlePanelObj.transform, false);
+            RectTransform mainTitleRect = mainTitleObj.AddComponent<RectTransform>();
+            mainTitleRect.anchoredPosition = new Vector2(0f, 85f);
+            mainTitleRect.sizeDelta = new Vector2(900f, 130f);
+            _titleText = mainTitleObj.AddComponent<Text>();
+            _titleText.font = defaultFont;
+            _titleText.fontSize = 84;
+            _titleText.fontStyle = FontStyle.Normal; // 도트 폰트 픽셀 모양을 칼같이 유지
+            _titleText.color = new Color(1f, 0.88f, 0.18f); // 화려한 골드 옐로우
+            _titleText.alignment = TextAnchor.MiddleCenter;
+            _titleText.text = "지각 5분전!!";
+
+            Outline titleOutline = mainTitleObj.AddComponent<Outline>();
+            titleOutline.effectColor = new Color(0.12f, 0.05f, 0.02f, 0.95f);
+            titleOutline.effectDistance = new Vector2(3f, -3f);
+
+            Shadow titleShadow = mainTitleObj.AddComponent<Shadow>();
+            titleShadow.effectColor = new Color(0f, 0f, 0f, 0.9f);
+            titleShadow.effectDistance = new Vector2(4f, -4f);
+
+            // 3. 서브타이틀
+            GameObject subTitleObj = new GameObject("SubTitle_Text");
+            subTitleObj.transform.SetParent(titlePanelObj.transform, false);
+            RectTransform subTitleRect = subTitleObj.AddComponent<RectTransform>();
+            subTitleRect.anchoredPosition = new Vector2(0f, 18f);
+            subTitleRect.sizeDelta = new Vector2(800f, 45f);
+            Text subText = subTitleObj.AddComponent<Text>();
+            subText.font = defaultFont;
+            subText.fontSize = 24;
+            subText.color = new Color(1f, 0.95f, 0.85f, 0.92f);
+            subText.alignment = TextAnchor.MiddleCenter;
+            subText.text = "1교시 출석 마감 직전! 셔틀버스를 피해 캠퍼스를 질주하라!";
+            Shadow subShadow = subTitleObj.AddComponent<Shadow>();
+            subShadow.effectColor = new Color(0f, 0f, 0f, 0.85f);
+            subShadow.effectDistance = new Vector2(2f, -2f);
+
+            // 4. 출발 안내 프롬프트 ("▶ 방향키를 눌러 출발! ◀")
+            GameObject promptObj = new GameObject("StartPrompt_Text");
+            promptObj.transform.SetParent(titlePanelObj.transform, false);
+            RectTransform promptRect = promptObj.AddComponent<RectTransform>();
+            promptRect.anchoredPosition = new Vector2(0f, -50f);
+            promptRect.sizeDelta = new Vector2(800f, 60f);
+            _startPromptText = promptObj.AddComponent<Text>();
+            _startPromptText.font = defaultFont;
+            _startPromptText.fontSize = 34;
+            _startPromptText.fontStyle = FontStyle.Normal;
+            _startPromptText.color = new Color(0.28f, 0.98f, 0.48f); // 에메랄드 그린
+            _startPromptText.alignment = TextAnchor.MiddleCenter;
+            _startPromptText.text = "▶ 방향키 (W, A, S, D / ↑ ↓ ← →)를 눌러 출발! ◀";
+            Shadow promptShadow = promptObj.AddComponent<Shadow>();
+            promptShadow.effectColor = new Color(0f, 0f, 0f, 0.9f);
+            promptShadow.effectDistance = new Vector2(2f, -2f);
+
+            // 5. 조작 키 가이드 박스
+            GameObject guideBoxObj = new GameObject("KeyGuide_Box");
+            guideBoxObj.transform.SetParent(titlePanelObj.transform, false);
+            RectTransform guideBoxRect = guideBoxObj.AddComponent<RectTransform>();
+            guideBoxRect.anchoredPosition = new Vector2(0f, -120f);
+            guideBoxRect.sizeDelta = new Vector2(620f, 46f);
+            Image guideBoxImg = guideBoxObj.AddComponent<Image>();
+            guideBoxImg.color = new Color(0.10f, 0.12f, 0.16f, 0.75f);
+
+            GameObject guideTextObj = new GameObject("KeyGuide_Text");
+            guideTextObj.transform.SetParent(guideBoxObj.transform, false);
+            RectTransform guideTextRect = guideTextObj.AddComponent<RectTransform>();
+            guideTextRect.anchoredPosition = Vector2.zero;
+            guideTextRect.sizeDelta = new Vector2(600f, 40f);
+            _keyGuideText = guideTextObj.AddComponent<Text>();
+            _keyGuideText.font = defaultFont;
+            _keyGuideText.fontSize = 20;
+            _keyGuideText.color = new Color(0.85f, 0.90f, 0.95f, 0.9f);
+            _keyGuideText.alignment = TextAnchor.MiddleCenter;
+            _keyGuideText.text = "[ ↑ / W ] 전진     [ ← / A ] 좌측     [ → / D ] 우측     [ ↓ / S ] 후퇴";
+        }
+
+        /// <summary>
+        /// 시작 안내 프롬프트 텍스트를 부드럽게 깜빡이는 펄스 코루틴을 시작합니다.
+        /// </summary>
+        private void StartPromptPulse()
+        {
+            if (_promptPulseRoutine != null)
+            {
+                StopCoroutine(_promptPulseRoutine);
+            }
+            _promptPulseRoutine = StartCoroutine(PromptPulseRoutine());
+        }
+
+        private System.Collections.IEnumerator PromptPulseRoutine()
+        {
+            if (_startPromptText == null) yield break;
+
+            Color baseColor = _startPromptText.color;
+            float time = 0f;
+
+            while (!_isGameStarted)
+            {
+                time += Time.deltaTime * 4f;
+                float alpha = Mathf.Lerp(0.35f, 1f, (Mathf.Sin(time) + 1f) * 0.5f);
+                _startPromptText.color = new Color(baseColor.r, baseColor.g, baseColor.b, alpha);
+                yield return null;
+            }
+        }
+
+        /// <summary>
+        /// 플레이어가 첫 방향키를 눌러 출발했을 때 호출됩니다.
+        /// 타이틀 화면을 페이드아웃하고 점수 HUD를 화면에 표시합니다.
+        /// </summary>
+        private void HandleGameStarted()
+        {
+            _isGameStarted = true;
+
+            if (_promptPulseRoutine != null)
+            {
+                StopCoroutine(_promptPulseRoutine);
+                _promptPulseRoutine = null;
+            }
+
+            if (_scoreText != null)
+            {
+                _scoreText.gameObject.SetActive(true);
+            }
+
+            if (_titleScreenPanel != null)
+            {
+                StartCoroutine(FadeOutTitleScreenRoutine());
+            }
+        }
+
+        private System.Collections.IEnumerator FadeOutTitleScreenRoutine()
+        {
+            if (_titleScreenPanel == null) yield break;
+
+            CanvasGroup cg = _titleScreenPanel.GetComponent<CanvasGroup>();
+            if (cg == null) cg = _titleScreenPanel.AddComponent<CanvasGroup>();
+
+            RectTransform rect = _titleScreenPanel.GetComponent<RectTransform>();
+            Vector2 startPos = rect.anchoredPosition;
+            Vector2 targetPos = startPos + new Vector2(0f, 40f);
+
+            float elapsed = 0f;
+            float duration = 0.25f;
+
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / duration);
+                cg.alpha = 1f - t;
+                rect.anchoredPosition = Vector2.Lerp(startPos, targetPos, t);
+                yield return null;
+            }
+
+            _titleScreenPanel.SetActive(false);
+        }
+
+        /// <summary>
+        /// 게임 재시작 시 호출됩니다.
+        /// </summary>
+        private void HandleGameRestarted()
+        {
+            _isGameStarted = false;
+            _isGameOver = false;
+
+            if (_gameOverPanel != null) _gameOverPanel.SetActive(false);
+            if (_warningBannerText != null) _warningBannerText.gameObject.SetActive(false);
+            if (_scoreText != null)
+            {
+                _scoreText.text = "0 m";
+                _scoreText.gameObject.SetActive(false);
+            }
+
+            if (_titleScreenPanel != null)
+            {
+                CanvasGroup cg = _titleScreenPanel.GetComponent<CanvasGroup>();
+                if (cg != null) cg.alpha = 1f;
+
+                RectTransform rect = _titleScreenPanel.GetComponent<RectTransform>();
+                if (rect != null) rect.anchoredPosition = new Vector2(0f, 40f);
+
+                _titleScreenPanel.SetActive(true);
+                StartPromptPulse();
             }
         }
 
