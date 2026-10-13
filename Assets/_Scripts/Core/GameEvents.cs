@@ -66,11 +66,15 @@ namespace CampusRun.Core
         /// <summary> 지각 위기 남은 시간과 진행률이 갱신될 때 발생합니다. (남은 초, 0~1 진행률) </summary>
         public static event Action<float, float> OnInactivityTimerUpdated;
 
+        /// <summary> 하천/트랙 경계선(아웃 위험 구역)에 근접했을 때 발생합니다. (isWarning: 경고 여부, dangerProgress: 0~1 위험도, isRight: 우측 경계 여부) </summary>
+        public static event Action<bool, float, bool> OnBoundaryWarning;
+
         public static void TriggerPlayerHopped(int playerGridZ) => OnPlayerHopped?.Invoke(playerGridZ);
         public static void TriggerPlayerGridMoved(Vector3Int newGridPos) => OnPlayerGridMoved?.Invoke(newGridPos);
         public static void TriggerPlayerDied(string deathReason, int finalDistance) => OnPlayerDied?.Invoke(deathReason, finalDistance);
         public static void TriggerInactivityWarning(bool isWarning) => OnInactivityWarning?.Invoke(isWarning);
         public static void TriggerInactivityTimerUpdated(float remainingSeconds, float progress) => OnInactivityTimerUpdated?.Invoke(remainingSeconds, progress);
+        public static void TriggerBoundaryWarning(bool isWarning, float dangerProgress, bool isRight) => OnBoundaryWarning?.Invoke(isWarning, dangerProgress, isRight);
 
         #endregion
 

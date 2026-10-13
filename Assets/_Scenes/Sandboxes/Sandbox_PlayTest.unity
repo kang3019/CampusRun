@@ -1973,6 +1973,8 @@ MonoBehaviour:
   _pitchAngle: 36
   _yawAngle: 24
   _smoothTime: 0.15
+  _horizontalFollowFactor: 0.22
+  _maxHorizontalCameraOffset: 1.2
   _onlyAdvanceForward: 1
   _enableAutoScroll: 0
   _minScrollSpeed: 0
