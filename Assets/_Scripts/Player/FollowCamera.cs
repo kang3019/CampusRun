@@ -1,5 +1,6 @@
 using UnityEngine;
 using CampusRun.Core;
+using CampusRun.Effects;
 
 namespace CampusRun.Player
 {
@@ -196,6 +197,12 @@ namespace CampusRun.Player
             // [중요] 플레이어의 점프(Y축 덜컹거림)를 무시하고 바닥(0f) 기준으로 고정하여 시점 튐/멀미 완전 방지
             Vector3 targetPosition = new Vector3(_target.position.x, 0f, _currentBaseZ) + _offset;
             transform.position = Vector3.SmoothDamp(transform.position, targetPosition, ref _currentVelocity, _smoothTime);
+
+            // 카메라 쉐이크 오프셋 반영 (충돌 및 물 빠짐 시 진동)
+            if (CameraShake.Instance != null)
+            {
+                transform.position += CameraShake.Instance.ShakeOffset;
+            }
 
             // [중요] 매 프레임 LookAt 호출 시 회전이 뒤틀리는 현상을 없애고, 안정적인 고정 각도 유지
             ApplyFixedRotation();

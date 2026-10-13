@@ -4,6 +4,7 @@ using UnityEngine.InputSystem;
 using CampusRun.Core;
 using CampusRun.Obstacles;
 using CampusRun.Track;
+using CampusRun.Effects;
 
 namespace CampusRun.Player
 {
@@ -20,10 +21,10 @@ namespace CampusRun.Player
         [SerializeField] private float _gridSize = 1.0f;
 
         [Tooltip("1칸 점프에 걸리는 시간(초) - 날렵하고 즉각적인 반응성")]
-        [SerializeField] private float _hopDuration = 0.14f;
+        [SerializeField] private float _hopDuration = 0.16f;
 
         [Tooltip("점프 시 Y축 최고 정점 높이 - 과도한 붕 뜸 방지")]
-        [SerializeField] private float _jumpPeakHeight = 0.28f;
+        [SerializeField] private float _jumpPeakHeight = 0.35f;
 
         [Tooltip("좌/우 이동 가능한 최소/최대 X 격자 한계")]
         [SerializeField] private int _minGridX = -4;
@@ -50,8 +51,8 @@ namespace CampusRun.Player
         [SerializeField] private Transform _visualModelTransform;
 
         [Tooltip("점프 시 일시적 스쿼시/스트레치 비율 (X, Y, Z)")]
-        [SerializeField] private Vector3 _jumpStretchScale = new Vector3(0.8f, 1.25f, 0.8f);
-        [SerializeField] private Vector3 _landSquashScale = new Vector3(1.25f, 0.75f, 1.25f);
+        [SerializeField] private Vector3 _jumpStretchScale = new Vector3(0.85f, 1.18f, 0.85f);
+        [SerializeField] private Vector3 _landSquashScale = new Vector3(1.15f, 0.85f, 1.15f);
 
         [Header("--- 타임아웃 (지체 감지 / 교수님의 매의 눈 기믹) ---")]
         [Tooltip("한 자리에 오래 머물 때 시간초과 탈락 활성화 여부")]
@@ -517,8 +518,8 @@ namespace CampusRun.Player
                         _visualModelTransform.localScale = Vector3.Lerp(_jumpStretchScale, _originalModelScale, (t - 0.5f) * 2f);
                     }
 
-                    // 점프 시 진행 방향으로 살짝 몸을 숙였다가(최대 12도) 착지 시 세움
-                    float tiltAngle = Mathf.Sin(t * Mathf.PI) * 12f;
+                    // 점프 시 진행 방향으로 살짝 몸을 숙였다가(최대 6도) 착지 시 세움
+                    float tiltAngle = Mathf.Sin(t * Mathf.PI) * 6f;
                     _visualModelTransform.localRotation = Quaternion.Euler(tiltAngle, 0f, 0f);
                 }
 
@@ -537,6 +538,9 @@ namespace CampusRun.Player
 
             if (_isAlive)
             {
+                // 생존 상태로 지면에 착지했을 때 은은하고 작은 미니 도트 모래먼지 연출
+                ImpactVFXManager.PlayDustPuff(targetPos);
+
                 // 선입력 버퍼에 대기 중인 다음 입력이 있다면 지체 없이 즉시 다음 점프 개시
                 if (!ConsumeBufferedInputIfReady())
                 {
@@ -624,6 +628,9 @@ namespace CampusRun.Player
             // 2. 널판지가 없는데 거대 물웅덩이 레인에 떨어진 경우 -> 퐁당 익사 탈락
             if (isWaterGround)
             {
+                ImpactVFXManager.PlayWaterSplash(landedPos);
+                CameraShake.ShakeOnWaterSplash();
+
                 if (_drownCoroutine != null) StopCoroutine(_drownCoroutine);
                 _drownCoroutine = StartCoroutine(DrownRoutine());
                 Die("🌊 비 온 뒤 거대 물웅덩이에 빠져 지각 탈락했습니다!");
