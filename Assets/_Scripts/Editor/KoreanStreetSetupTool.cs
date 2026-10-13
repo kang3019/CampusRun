@@ -366,107 +366,95 @@ namespace CampusRun.EditorTools
             float invX = 1f / 60f;
             float invY = 1f / 0.2f;
 
-            GameObject crosswalkGroup = new GameObject("CrosswalkGroup");
-            crosswalkGroup.transform.SetParent(roadRoot.transform, false);
+            // [사용자 요청] 횡단보도(사선/잔선)는 완전 제거!
+            // 통일했던 그 일정한 일자 작대기 페인트(Dash Line)의 다채로운 랜덤 패턴 그룹 5종 구축
 
-            // [사용자 요청]
-            // 1. 횡단보도 줄이 많이 얇고 여러 줄로 구성 (기존 4줄 0.14m -> 8줄 0.045m)
-            // 2. 좌우 일자 정지선(StopLine) 제거
-            // 3. 다양한 방향/스타일 변형(정방향, 좌사선, 우사선, 듀얼 통로, 광폭)을 하위 자식 그룹으로 구축
-            float[] crosswalkZ = new float[] { -0.315f, -0.225f, -0.135f, -0.045f, 0.045f, 0.135f, 0.225f, 0.315f };
-            float stripeThickness = 0.045f;
-            float stripeHeight = 0.035f * invY;
-
-            // --- 변형 1: 정방향 기본 수평 스트라이프 8줄 ---
-            GameObject varStraight = new GameObject("Variant_Straight");
-            varStraight.transform.SetParent(crosswalkGroup.transform, false);
-            for (int idx = 0; idx < crosswalkZ.Length; idx++)
+            // --- 패턴 1: 기본 일자 점선 (Standard Dashes, 3.6m 등간격) ---
+            GameObject patternStandard = new GameObject("DashPattern_Standard");
+            patternStandard.transform.SetParent(roadRoot.transform, false);
+            float[] standardX = new float[] { -25.2f, -21.6f, -18f, -14.4f, -10.8f, -7.2f, -3.6f, 0f, 3.6f, 7.2f, 10.8f, 14.4f, 18f, 21.6f, 25.2f };
+            foreach (float wx in standardX)
             {
-                float wz = crosswalkZ[idx];
-                CreateFloorDecorationCube($"Stripe_{idx + 1}", varStraight.transform, matCrosswalk,
-                    new Vector3(0f, 0.52f, wz),
-                    new Vector3(3.6f * invX, stripeHeight, stripeThickness));
-            }
-
-            // --- 변형 2: 좌사선 대각선 스트라이프 8줄 ---
-            GameObject varDiagLeft = new GameObject("Variant_Diagonal_Left");
-            varDiagLeft.transform.SetParent(crosswalkGroup.transform, false);
-            for (int idx = 0; idx < crosswalkZ.Length; idx++)
-            {
-                float wz = crosswalkZ[idx];
-                float norm = (float)idx / (crosswalkZ.Length - 1) - 0.5f; // -0.5 ~ +0.5
-                float shiftX = -norm * 1.5f;
-                CreateFloorDecorationCube($"Stripe_DiagL_{idx + 1}", varDiagLeft.transform, matCrosswalk,
-                    new Vector3(shiftX * invX, 0.52f, wz),
-                    new Vector3(3.2f * invX, stripeHeight, stripeThickness));
-            }
-            varDiagLeft.SetActive(false);
-
-            // --- 변형 3: 우사선 대각선 스트라이프 8줄 ---
-            GameObject varDiagRight = new GameObject("Variant_Diagonal_Right");
-            varDiagRight.transform.SetParent(crosswalkGroup.transform, false);
-            for (int idx = 0; idx < crosswalkZ.Length; idx++)
-            {
-                float wz = crosswalkZ[idx];
-                float norm = (float)idx / (crosswalkZ.Length - 1) - 0.5f; // -0.5 ~ +0.5
-                float shiftX = norm * 1.5f;
-                CreateFloorDecorationCube($"Stripe_DiagR_{idx + 1}", varDiagRight.transform, matCrosswalk,
-                    new Vector3(shiftX * invX, 0.52f, wz),
-                    new Vector3(3.2f * invX, stripeHeight, stripeThickness));
-            }
-            varDiagRight.SetActive(false);
-
-            // --- 변형 4: 좌우 분리형 듀얼 통로 스트라이프 8줄 ---
-            GameObject varDual = new GameObject("Variant_Dual_Pathway");
-            varDual.transform.SetParent(crosswalkGroup.transform, false);
-            for (int idx = 0; idx < crosswalkZ.Length; idx++)
-            {
-                float wz = crosswalkZ[idx];
-                CreateFloorDecorationCube($"Stripe_L_{idx + 1}", varDual.transform, matCrosswalk,
-                    new Vector3(-2.2f * invX, 0.52f, wz),
-                    new Vector3(1.8f * invX, stripeHeight, stripeThickness));
-                CreateFloorDecorationCube($"Stripe_R_{idx + 1}", varDual.transform, matCrosswalk,
-                    new Vector3(2.2f * invX, 0.52f, wz),
-                    new Vector3(1.8f * invX, stripeHeight, stripeThickness));
-            }
-            varDual.SetActive(false);
-
-            // --- 변형 5: 광폭 중앙 통로 스트라이프 8줄 ---
-            GameObject varWide = new GameObject("Variant_Wide");
-            varWide.transform.SetParent(crosswalkGroup.transform, false);
-            for (int idx = 0; idx < crosswalkZ.Length; idx++)
-            {
-                float wz = crosswalkZ[idx];
-                CreateFloorDecorationCube($"Stripe_Wide_{idx + 1}", varWide.transform, matCrosswalk,
-                    new Vector3(0f, 0.52f, wz),
-                    new Vector3(5.2f * invX, stripeHeight, stripeThickness));
-            }
-            varWide.SetActive(false);
-
-            GameObject dashesGroup = new GameObject("StandardDashesGroup");
-            dashesGroup.transform.SetParent(roadRoot.transform, false);
-
-            float[] dashWorldPositionsX = new float[] { -21.6f, -18f, -14.4f, -10.8f, -7.2f, -3.6f, 0f, 3.6f, 7.2f, 10.8f, 14.4f, 18f, 21.6f };
-            foreach (float wx in dashWorldPositionsX)
-            {
-                CreateFloorDecorationCube($"Dash_{wx:F1}", dashesGroup.transform, matRoadMarking,
+                CreateFloorDecorationCube($"Dash_{wx:F1}", patternStandard.transform, matRoadMarking,
                     new Vector3(wx * invX, 0.515f, 0f),
-                    new Vector3(1.4f * invX, 0.03f * invY, 0.15f));
+                    new Vector3(1.6f * invX, 0.03f * invY, 0.15f));
             }
+            patternStandard.SetActive(true);
+
+            // --- 패턴 2: 넓은 간격 띄엄 점선 (Sparse Dashes, 7.2m 간격) ---
+            GameObject patternSparse = new GameObject("DashPattern_Sparse");
+            patternSparse.transform.SetParent(roadRoot.transform, false);
+            float[] sparseX = new float[] { -25.2f, -18f, -10.8f, -3.6f, 3.6f, 10.8f, 18f, 25.2f };
+            foreach (float wx in sparseX)
+            {
+                CreateFloorDecorationCube($"Dash_Sp_{wx:F1}", patternSparse.transform, matRoadMarking,
+                    new Vector3(wx * invX, 0.515f, 0f),
+                    new Vector3(1.6f * invX, 0.03f * invY, 0.15f));
+            }
+            patternSparse.SetActive(false);
+
+            // --- 패턴 3: 긴 호흡 일자 점선 (Long Dashes, 5.4m 간격, 2.8m 길이) ---
+            GameObject patternLong = new GameObject("DashPattern_Long");
+            patternLong.transform.SetParent(roadRoot.transform, false);
+            float[] longX = new float[] { -24.3f, -18.9f, -13.5f, -8.1f, -2.7f, 2.7f, 8.1f, 13.5f, 18.9f, 24.3f };
+            foreach (float wx in longX)
+            {
+                CreateFloorDecorationCube($"Dash_Lg_{wx:F1}", patternLong.transform, matRoadMarking,
+                    new Vector3(wx * invX, 0.515f, 0f),
+                    new Vector3(2.8f * invX, 0.03f * invY, 0.15f));
+            }
+            patternLong.SetActive(false);
+
+            // --- 패턴 4: 더블 일자 점선 / 이중선 (Double Dashes, Z=±0.08m) ---
+            GameObject patternDouble = new GameObject("DashPattern_Double");
+            patternDouble.transform.SetParent(roadRoot.transform, false);
+            foreach (float wx in standardX)
+            {
+                CreateFloorDecorationCube($"Dash_D1_{wx:F1}", patternDouble.transform, matRoadMarking,
+                    new Vector3(wx * invX, 0.515f, -0.08f),
+                    new Vector3(1.6f * invX, 0.03f * invY, 0.10f));
+                CreateFloorDecorationCube($"Dash_D2_{wx:F1}", patternDouble.transform, matRoadMarking,
+                    new Vector3(wx * invX, 0.515f, 0.08f),
+                    new Vector3(1.6f * invX, 0.03f * invY, 0.10f));
+            }
+            patternDouble.SetActive(false);
+
+            // --- 패턴 5: 촘촘한 짧은 일자 점선 (Dense Dashes, 2.4m 간격, 1.1m 길이) ---
+            GameObject patternDense = new GameObject("DashPattern_Dense");
+            patternDense.transform.SetParent(roadRoot.transform, false);
+            float[] denseX = new float[] { -26.4f, -24.0f, -21.6f, -19.2f, -16.8f, -14.4f, -12.0f, -9.6f, -7.2f, -4.8f, -2.4f, 0f, 2.4f, 4.8f, 7.2f, 9.6f, 12.0f, 14.4f, 16.8f, 19.2f, 21.6f, 24.0f, 26.4f };
+            foreach (float wx in denseX)
+            {
+                CreateFloorDecorationCube($"Dash_Dn_{wx:F1}", patternDense.transform, matRoadMarking,
+                    new Vector3(wx * invX, 0.515f, 0f),
+                    new Vector3(1.1f * invX, 0.03f * invY, 0.15f));
+            }
+            patternDense.SetActive(false);
 
             RoadLane roadScript = roadRoot.GetComponent<RoadLane>();
             if (roadScript != null)
             {
                 SerializedObject so = new SerializedObject(roadScript);
-                so.FindProperty("_crosswalkGroup").objectReferenceValue = crosswalkGroup;
-                so.FindProperty("_standardDashesGroup").objectReferenceValue = dashesGroup;
-                so.FindProperty("_crosswalkChance").floatValue = 0.25f;
+                so.FindProperty("_crosswalkGroup").objectReferenceValue = null;
+                so.FindProperty("_standardDashesGroup").objectReferenceValue = patternStandard;
+
+                SerializedProperty patternListProp = so.FindProperty("_dashPatternGroups");
+                if (patternListProp != null)
+                {
+                    patternListProp.arraySize = 5;
+                    patternListProp.GetArrayElementAtIndex(0).objectReferenceValue = patternStandard;
+                    patternListProp.GetArrayElementAtIndex(1).objectReferenceValue = patternSparse;
+                    patternListProp.GetArrayElementAtIndex(2).objectReferenceValue = patternLong;
+                    patternListProp.GetArrayElementAtIndex(3).objectReferenceValue = patternDouble;
+                    patternListProp.GetArrayElementAtIndex(4).objectReferenceValue = patternDense;
+                }
+
                 so.ApplyModifiedProperties();
             }
 
             PrefabUtility.SaveAsPrefabAsset(roadRoot, RoadLanePrefabPath);
             PrefabUtility.UnloadPrefabContents(roadRoot);
-            Debug.Log("[KoreanStreetSetupTool] PF_RoadLane.prefab 다채로운 얇은 횡단보도(5가지 변형) 재구성 완료!");
+            Debug.Log("[KoreanStreetSetupTool] PF_RoadLane.prefab 통일된 일자 페인트 5종 패턴 재구성 완료 (횡단보도 완전 제거)!");
         }
 
         /// <summary>
@@ -731,6 +719,9 @@ namespace CampusRun.EditorTools
             // 6. FastMotorcycle 컴포넌트 확인 및 연결
             FastMotorcycle fastMotorcycle = prefabRoot.GetComponent<FastMotorcycle>();
             if (fastMotorcycle == null) fastMotorcycle = prefabRoot.AddComponent<FastMotorcycle>();
+            SerializedObject so = new SerializedObject(fastMotorcycle);
+            so.FindProperty("_vehicleDisplayName").stringValue = "승용차";
+            so.ApplyModifiedProperties();
 
             PrefabUtility.SaveAsPrefabAsset(prefabRoot, FastVehiclePrefabPath);
             PrefabUtility.UnloadPrefabContents(prefabRoot);
@@ -799,6 +790,9 @@ namespace CampusRun.EditorTools
 
             FastMotorcycle fastMotorcycle = prefabRoot.GetComponent<FastMotorcycle>();
             if (fastMotorcycle == null) fastMotorcycle = prefabRoot.AddComponent<FastMotorcycle>();
+            SerializedObject so = new SerializedObject(fastMotorcycle);
+            so.FindProperty("_vehicleDisplayName").stringValue = "오토바이";
+            so.ApplyModifiedProperties();
 
             PrefabUtility.SaveAsPrefabAsset(prefabRoot, FastVehiclePrefabPath);
             PrefabUtility.UnloadPrefabContents(prefabRoot);
@@ -869,6 +863,9 @@ namespace CampusRun.EditorTools
 
             FastMotorcycle fastMotorcycle = prefabRoot.GetComponent<FastMotorcycle>();
             if (fastMotorcycle == null) fastMotorcycle = prefabRoot.AddComponent<FastMotorcycle>();
+            SerializedObject so = new SerializedObject(fastMotorcycle);
+            so.FindProperty("_vehicleDisplayName").stringValue = "경찰차";
+            so.ApplyModifiedProperties();
 
             PrefabUtility.SaveAsPrefabAsset(prefabRoot, FastVehiclePrefabPath);
             PrefabUtility.UnloadPrefabContents(prefabRoot);

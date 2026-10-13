@@ -32,6 +32,9 @@ namespace CampusRun.Player
         [Tooltip("최고 기록 대비 뒤로 후퇴할 수 있는 최대 허용 격자 수")]
         [SerializeField] private int _maxBackwardAllowance = 2;
 
+        [Tooltip("일반 도로/인도/안전구역 블럭의 상단 표면 높이 (블럭 두께 0.2m 기준 Y=0.10m 안착하여 발 빠짐 완전 방지)")]
+        [SerializeField] private float _groundSurfaceY = 0.10f;
+
         [Header("--- 조작 민감도 및 인풋 버퍼링 설정 ---")]
         [Tooltip("점프 중 키를 눌렀을 때 착지 즉시 반응하도록 기억하는 선입력 유효 시간(초)")]
         [SerializeField] private float _inputBufferTime = 0.18f;
@@ -118,10 +121,10 @@ namespace CampusRun.Player
                 _landSquashScale = new Vector3(_originalModelScale.x * 1.20f, _originalModelScale.y * 0.80f, _originalModelScale.z * 1.20f);
             }
 
-            // 시작 좌표를 그리드에 스냅
+            // 시작 좌표를 그리드에 스냅 및 바닥 블럭 상단 표면 높이로 배치
             _currentGridX = Mathf.RoundToInt(transform.position.x / _gridSize);
             _currentGridZ = Mathf.RoundToInt(transform.position.z / _gridSize);
-            transform.position = new Vector3(_currentGridX * _gridSize, 0f, _currentGridZ * _gridSize);
+            transform.position = new Vector3(_currentGridX * _gridSize, _groundSurfaceY, _currentGridZ * _gridSize);
         }
 
         private void OnEnable()
@@ -177,7 +180,7 @@ namespace CampusRun.Player
             Vector3Int pressedDir = Vector3Int.zero;
             bool wasPressedThisFrame = false;
 
-            if (keyboard.wKey.wasPressedThisFrame || keyboard.upArrowKey.wasPressedThisFrame)
+            if (keyboard.wKey.wasPressedThisFrame || keyboard.upArrowKey.wasPressedThisFrame || keyboard.spaceKey.wasPressedThisFrame || keyboard.enterKey.wasPressedThisFrame)
             {
                 pressedDir = Vector3Int.forward;
                 wasPressedThisFrame = true;
@@ -212,7 +215,7 @@ namespace CampusRun.Player
             if (_enableAutoRepeat)
             {
                 Vector3Int heldDir = Vector3Int.zero;
-                if (keyboard.wKey.isPressed || keyboard.upArrowKey.isPressed) heldDir = Vector3Int.forward;
+                if (keyboard.wKey.isPressed || keyboard.upArrowKey.isPressed || keyboard.spaceKey.isPressed || keyboard.enterKey.isPressed) heldDir = Vector3Int.forward;
                 else if (keyboard.sKey.isPressed || keyboard.downArrowKey.isPressed) heldDir = Vector3Int.back;
                 else if (keyboard.aKey.isPressed || keyboard.leftArrowKey.isPressed) heldDir = Vector3Int.left;
                 else if (keyboard.dKey.isPressed || keyboard.rightArrowKey.isPressed) heldDir = Vector3Int.right;
@@ -370,12 +373,28 @@ namespace CampusRun.Player
                 ? Quaternion.LookRotation(worldDirection, Vector3.up)
                 : transform.rotation;
 
-            // 목표 위치 계산
+            // 목표 위치 및 높이 계산 (통나무 위는 통나무 윗면, 일반 지상은 도로/인도 블럭 상단 표면 높이로 점프)
             Vector3 startPos = transform.position;
-            Vector3 targetPos = new Vector3(targetX * _gridSize, 0f, targetZ * _gridSize);
+            float targetY = _groundSurfaceY;
+
+            Vector3 checkCenter = new Vector3(targetX * _gridSize, 0.25f, targetZ * _gridSize);
+            int targetHits = Physics.OverlapSphereNonAlloc(checkCenter, 0.45f, _obstacleCheckHits);
+            for (int i = 0; i < targetHits; i++)
+            {
+                Collider hit = _obstacleCheckHits[i];
+                if (hit == null) continue;
+                FloatingPlank plank = hit.GetComponentInParent<FloatingPlank>();
+                if (plank != null)
+                {
+                    targetY = plank.TopSurfaceY;
+                    break;
+                }
+            }
+
+            Vector3 targetPos = new Vector3(targetX * _gridSize, targetY, targetZ * _gridSize);
 
             // 목표 칸에 방치된 킥보드 등 고정 장애물이 있는지 비할당 검사
-            if (IsObstacleAt(targetPos))
+            if (IsObstacleAt(new Vector3(targetPos.x, _groundSurfaceY, targetPos.z)))
             {
                 if (_hopCoroutine != null) StopCoroutine(_hopCoroutine);
                 _hopCoroutine = StartCoroutine(BlockedHopRoutine(startPos, worldDirection));
@@ -499,8 +518,9 @@ namespace CampusRun.Player
                 float smoothT = Mathf.SmoothStep(0f, 1f, t);
                 Vector3 currentHorizontal = Vector3.Lerp(startPos, targetPos, smoothT);
 
-                // 3. Y축 포물선 계산 (Sin 곡선: 0 -> 정점 -> 0)
-                float currentY = Mathf.Sin(t * Mathf.PI) * _jumpPeakHeight;
+                // 3. Y축 포물선 계산 (시작 높이와 목표 착지 높이 사이를 보간하여 통나무 등 높이 차이 자연스럽게 극복)
+                float baseY = Mathf.Lerp(startPos.y, targetPos.y, smoothT);
+                float currentY = baseY + Mathf.Sin(t * Mathf.PI) * _jumpPeakHeight;
                 transform.position = new Vector3(currentHorizontal.x, currentY, currentHorizontal.z);
 
                 // 4. 모델 스쿼시/스트레치 및 전방 틸트(기울기) 연출
@@ -613,11 +633,12 @@ namespace CampusRun.Player
                 }
             }
 
-            // 1. 널판지 위에 착지 성공 -> 탑승 및 표류 동기화
+            // 1. 널판지 위에 착지 성공 -> 탑승 및 표류 동기화 (몸이 끼지 않고 통나무 윗면에 정확히 발을 딛음)
             if (foundPlank != null)
             {
                 _currentMountedPlank = foundPlank;
                 _currentMountedPlank.MountPlayer(this);
+                transform.position = new Vector3(transform.position.x, foundPlank.TopSurfaceY, transform.position.z);
                 return;
             }
 
@@ -627,17 +648,21 @@ namespace CampusRun.Player
                 if (_drownCoroutine != null) StopCoroutine(_drownCoroutine);
                 _drownCoroutine = StartCoroutine(DrownRoutine());
                 Die("🌊 비 온 뒤 거대 물웅덩이에 빠져 지각 탈락했습니다!");
+                return;
             }
+
+            // 3. 일반 지상 블럭(도로, 인도, 안전구역) 착지 -> 바닥 블럭 상단 표면(0.10m) 위로 발바닥 완벽 안착
+            transform.position = new Vector3(transform.position.x, _groundSurfaceY, transform.position.z);
         }
 
         /// <summary>
-        /// 널판지가 이동할 때 플레이어도 동일한 이동량만큼 X축으로 부드럽게 표류(Drift)시킵니다.
+        /// 널판지가 이동할 때 플레이어도 동일한 이동량만큼 X축으로 부드럽게 표류(Drift)시키며 통나무 윗면 높이를 유지합니다.
         /// </summary>
-        public void ApplyPlankDrift(float deltaX)
+        public void ApplyPlankDrift(float deltaX, float plankSurfaceY)
         {
             if (!_isAlive || _isHopping) return;
 
-            transform.position += new Vector3(deltaX, 0f, 0f);
+            transform.position = new Vector3(transform.position.x + deltaX, plankSurfaceY, transform.position.z);
 
             // 화면 좌우 한계를 너무 많이 벗어나면 화면 밖 표류 탈락
             float currentX = transform.position.x;
@@ -649,6 +674,12 @@ namespace CampusRun.Player
 
             // 현재 위치를 가장 가까운 그리드 정수로 동기화 (다음 점프 기준점)
             _currentGridX = Mathf.RoundToInt(currentX / _gridSize);
+        }
+
+        public void ApplyPlankDrift(float deltaX)
+        {
+            float targetY = (_currentMountedPlank != null) ? _currentMountedPlank.TopSurfaceY : transform.position.y;
+            ApplyPlankDrift(deltaX, targetY);
         }
 
         private IEnumerator DrownRoutine()
@@ -892,7 +923,7 @@ namespace CampusRun.Player
             _isAlive = true;
             _isControlEnabled = true;
 
-            transform.position = Vector3.zero;
+            transform.position = new Vector3(0f, _groundSurfaceY, 0f);
             transform.rotation = Quaternion.identity;
 
             if (_visualModelTransform != null)

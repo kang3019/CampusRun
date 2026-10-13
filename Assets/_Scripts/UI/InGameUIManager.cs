@@ -68,8 +68,12 @@ namespace CampusRun.UI
         {
             if (FindAnyObjectByType<InGameUIManager>() == null)
             {
-                GameObject uiManagerObj = new GameObject("[InGameUIManager]");
-                uiManagerObj.AddComponent<InGameUIManager>();
+                // 씬에 플레이어 컨트롤러가 있는 실제 게임 씬에서만 자동 생성 (빈 씬에서의 오작동 방지)
+                if (FindAnyObjectByType<CampusRun.Player.GridPlayerController>() != null)
+                {
+                    GameObject uiManagerObj = new GameObject("[InGameUIManager]");
+                    uiManagerObj.AddComponent<InGameUIManager>();
+                }
             }
         }
 
@@ -140,6 +144,36 @@ namespace CampusRun.UI
 
         private void Update()
         {
+            // 게임 시작 전: 마우스 좌클릭, 스페이스바, 엔터키로도 즉시 첫 도약하며 게임 시작 가능
+            if (!_isGameStarted && !_isGameOver)
+            {
+                var keyboard = UnityEngine.InputSystem.Keyboard.current;
+                var mouse = UnityEngine.InputSystem.Mouse.current;
+
+                bool shouldStart = false;
+                if (keyboard != null && (keyboard.spaceKey.wasPressedThisFrame || keyboard.enterKey.wasPressedThisFrame))
+                {
+                    shouldStart = true;
+                }
+                else if (mouse != null && mouse.leftButton.wasPressedThisFrame)
+                {
+                    shouldStart = true;
+                }
+
+                if (shouldStart)
+                {
+                    var player = FindAnyObjectByType<CampusRun.Player.GridPlayerController>();
+                    if (player != null && player.IsAlive)
+                    {
+                        player.TryHop(Vector3Int.forward);
+                    }
+                    else
+                    {
+                        HandleGameStarted();
+                    }
+                }
+            }
+
             // 게임오버 시 키보드 R키, 스페이스바, 엔터키로도 즉시 다시하기 가능
             if (_isGameOver)
             {

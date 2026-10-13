@@ -10,6 +10,12 @@ namespace CampusRun.Obstacles
     [SelectionBase]
     public class FastMotorcycle : MonoBehaviour
     {
+        [Header("--- 차량 식별 ---")]
+        [Tooltip("사망 메시지에 표시될 차량 명칭 (예: 경찰차, 오토바이)")]
+        [SerializeField] private string _vehicleDisplayName = "경찰차";
+
+        public string VehicleDisplayName => _vehicleDisplayName;
+
         [Header("--- 이동 및 경계 설정 ---")]
         [Tooltip("기본 초고속 이동 속도 (m/s)")]
         [SerializeField] private float _rushSpeed = 30f;
