@@ -45,6 +45,30 @@ namespace CampusRun.Track
         private Coroutine _cycleRoutine;
         private IObjectPool<FastMotorcycle> _motorcyclePool;
         private readonly List<FastMotorcycle> _activeMotorcycles = new List<FastMotorcycle>();
+        private static Transform _fastVehicleContainer;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics()
+        {
+            _fastVehicleContainer = null;
+        }
+
+        private static Transform GetOrCreateContainer()
+        {
+            if (_fastVehicleContainer == null)
+            {
+                GameObject container = GameObject.Find("[Vehicle_Pool_Container]");
+                if (container == null)
+                {
+                    container = new GameObject("[Vehicle_Pool_Container]");
+                    container.transform.position = Vector3.zero;
+                    container.transform.rotation = Quaternion.identity;
+                    container.transform.localScale = Vector3.one;
+                }
+                _fastVehicleContainer = container.transform;
+            }
+            return _fastVehicleContainer;
+        }
 
         private void Awake()
         {
@@ -64,7 +88,10 @@ namespace CampusRun.Track
             _motorcyclePool = new ObjectPool<FastMotorcycle>(
                 createFunc: () =>
                 {
-                    FastMotorcycle motorcycle = Instantiate(_motorcyclePrefab, transform);
+                    // 레인 Transform(Scale: 60, 0.2, 1)의 자식으로 들어가면 60배 왜곡되므로,
+                    // 무할당 정규 컨테이너([Vehicle_Pool_Container], Scale 1,1,1)에 인스턴스화
+                    Transform container = GetOrCreateContainer();
+                    FastMotorcycle motorcycle = Instantiate(_motorcyclePrefab, container);
                     motorcycle.gameObject.SetActive(false);
                     return motorcycle;
                 },
@@ -75,13 +102,13 @@ namespace CampusRun.Track
                 actionOnRelease: (motorcycle) =>
                 {
                     _activeMotorcycles.Remove(motorcycle);
-                    motorcycle.gameObject.SetActive(false);
+                    if (motorcycle != null) motorcycle.gameObject.SetActive(false);
                 },
                 actionOnDestroy: (motorcycle) =>
                 {
                     if (motorcycle != null) Destroy(motorcycle.gameObject);
                 },
-                collectionCheck: true,
+                collectionCheck: false,
                 defaultCapacity: 3,
                 maxSize: 8
             );
@@ -192,9 +219,10 @@ namespace CampusRun.Track
 
             FastMotorcycle motorcycle = _motorcyclePool.Get();
 
-            // 스폰 위치 계산 (레인 Y=0.25f, X는 진행 방향 반대쪽 바깥)
+            // 스폰 위치 계산 (레인 도로면 Y=0.10f, X는 진행 방향 반대쪽 바깥)
             float startX = (_currentDirection > 0) ? -_spawnBoundaryX : _spawnBoundaryX;
-            motorcycle.transform.position = new Vector3(startX, 0.25f, LaneZIndex);
+            motorcycle.transform.position = new Vector3(startX, 0.10f, LaneZIndex);
+            motorcycle.transform.localScale = Vector3.one;
 
             // 초고속 이동 초기화
             motorcycle.Initialize(_currentDirection, _rushSpeed, (m) =>

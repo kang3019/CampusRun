@@ -32,7 +32,7 @@ namespace CampusRun.EditorTools
         private const string MatScaffoldDarkPath = MaterialsDir + "/M_Scaffold_Dark.mat";
         private const string MatSafetyYellowPath = MaterialsDir + "/M_Safety_Yellow.mat";
 
-        private const string PrefsKey = "CampusRun_KoreanStreetSetup_Executed_v11";
+        private const string PrefsKey = "CampusRun_KoreanStreetSetup_Executed_v13";
 
         // 프리팹 경로
         private const string SafeLanePrefabPath = PrefabsEnvDir + "/PF_SafeLane.prefab";
@@ -43,6 +43,12 @@ namespace CampusRun.EditorTools
         private const string StreetLightPrefabPath = PrefabsEnvDir + "/PF_StreetLight.prefab";
         private const string FloatingPlankPrefabPath = PrefabsObsDir + "/PF_FloatingPlank.prefab";
         private const string TreePrefabPath = PrefabsObsDir + "/PF_Tree.prefab";
+        private const string FastVehiclePrefabPath = PrefabsObsDir + "/PF_Motorcycle.prefab";
+
+        // 3D 모델 원본 경로
+        private const string SportCarSourcePrefabPath = "Assets/Awb-Free Low Poly Vehicles/Prefabs/Sport Car_39.prefab";
+        private const string ScooterSourcePrefabPath = "Assets/MARCIN'S Assets/Electric Scooter/Prefabs/Scooter_1.prefab";
+        private const string PoliceCarSourcePrefabPath = "Assets/Awb-Free Low Poly Vehicles/Prefabs/Police Car N_4.prefab";
 
         [InitializeOnLoadMethod]
         private static void AutoRunOnCompile()
@@ -54,6 +60,7 @@ namespace CampusRun.EditorTools
                 {
                     ImportAndApplyPixelFont();
                     SetupKoreanStreetTheme();
+                    SetupFastPoliceCarPrefab();
                 };
             }
         }
@@ -657,6 +664,219 @@ namespace CampusRun.EditorTools
                 PrefabUtility.UnloadPrefabContents(plankRoot);
                 Debug.Log("[KoreanStreetSetupTool] PF_FloatingPlank ➡️ 정밀 은빛 철제 비계 발판(아시바 발판) 리디자인 완료!");
             }
+        }
+
+        [MenuItem("CampusRun/초고속 질주 차량 모델 세팅 (스포츠카)")]
+        public static void SetupFastSportCarPrefab()
+        {
+            Debug.Log("[KoreanStreetSetupTool] === 초고속 스포츠카(Sport Car_39) 프리팹 세팅 시작 ===");
+
+            GameObject sportCarSrc = AssetDatabase.LoadAssetAtPath<GameObject>(SportCarSourcePrefabPath);
+            if (sportCarSrc == null)
+            {
+                Debug.LogError($"[KoreanStreetSetupTool] 스포츠카 소스 프리팹을 찾을 수 없습니다: {SportCarSourcePrefabPath}");
+                return;
+            }
+
+            GameObject prefabRoot = PrefabUtility.LoadPrefabContents(FastVehiclePrefabPath);
+            if (prefabRoot == null)
+            {
+                Debug.LogError($"[KoreanStreetSetupTool] 대상 프리팹을 찾을 수 없습니다: {FastVehiclePrefabPath}");
+                return;
+            }
+
+            // 1. 기존 임시 큐브 렌더러/필터 제거
+            MeshFilter oldMf = prefabRoot.GetComponent<MeshFilter>();
+            if (oldMf != null) Object.DestroyImmediate(oldMf);
+
+            MeshRenderer oldMr = prefabRoot.GetComponent<MeshRenderer>();
+            if (oldMr != null) Object.DestroyImmediate(oldMr);
+
+            // 2. 기존 모든 자식 오브젝트 정리
+            for (int i = prefabRoot.transform.childCount - 1; i >= 0; i--)
+            {
+                Object.DestroyImmediate(prefabRoot.transform.GetChild(i).gameObject);
+            }
+
+            // 3. 스포츠카 3D 모델 인스턴스화
+            GameObject visual = Object.Instantiate(sportCarSrc, prefabRoot.transform);
+            visual.name = "VisualModel";
+
+            // 스포츠카 자체에 있던 원본 BoxCollider 제거 (루트 FastMotorcycle의 충돌체와 중복 방지)
+            BoxCollider visualCol = visual.GetComponent<BoxCollider>();
+            if (visualCol != null) Object.DestroyImmediate(visualCol);
+
+            // 시각적 모델 좌표/회전 정규화 (전방이 로컬 +Z를 향하도록 정렬)
+            visual.transform.localPosition = Vector3.zero;
+            visual.transform.localRotation = Quaternion.identity;
+
+            // 길건너 친구들(Crossy Road) 스타일의 도톰하고 볼륨감 있는 아케이드 황금 비율 적용:
+            // 원본 스포츠카 크기: 폭 2.09m, 높이 1.15m, 길이 4.74m
+            // 기존 0.36 균등 스케일 적용 시 높이가 0.41m로 너무 납작해 보이는 현상 완벽 개선:
+            // X: 0.40f (폭 0.84m), Y: 0.58f (높이 0.67m로 +62% 도톰하게), Z: 0.38f (길이 1.80m)
+            visual.transform.localScale = new Vector3(0.40f, 0.58f, 0.38f);
+
+            // 4. 루트 트랜스폼 및 태그 세팅
+            prefabRoot.transform.localScale = Vector3.one;
+            prefabRoot.transform.localRotation = Quaternion.identity;
+            prefabRoot.tag = "Obstacle";
+
+            // 5. 루트 BoxCollider 정밀 설정 (Tag: Obstacle, isTrigger: true)
+            BoxCollider col = prefabRoot.GetComponent<BoxCollider>();
+            if (col == null) col = prefabRoot.AddComponent<BoxCollider>();
+            col.isTrigger = true;
+            col.size = new Vector3(0.80f, 0.66f, 1.78f);
+            col.center = new Vector3(0f, 0.33f, 0f);
+
+            // 6. FastMotorcycle 컴포넌트 확인 및 연결
+            FastMotorcycle fastMotorcycle = prefabRoot.GetComponent<FastMotorcycle>();
+            if (fastMotorcycle == null) fastMotorcycle = prefabRoot.AddComponent<FastMotorcycle>();
+
+            PrefabUtility.SaveAsPrefabAsset(prefabRoot, FastVehiclePrefabPath);
+            PrefabUtility.UnloadPrefabContents(prefabRoot);
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            Debug.Log("[KoreanStreetSetupTool] PF_Motorcycle ➡️ 초고속 스포츠카(Sport Car_39) 3D 모델 세팅 완료! (폭 0.75m, 길이 1.70m, 차고 0.41m)");
+        }
+
+        [MenuItem("CampusRun/초고속 질주 차량 모델 세팅 (오토바이 스쿠터)")]
+        public static void SetupFastScooterPrefab()
+        {
+            Debug.Log("[KoreanStreetSetupTool] === 초고속 스쿠터(Scooter_1) 프리팹 세팅 시작 ===");
+
+            GameObject scooterSrc = AssetDatabase.LoadAssetAtPath<GameObject>(ScooterSourcePrefabPath);
+            if (scooterSrc == null)
+            {
+                Debug.LogError($"[KoreanStreetSetupTool] 스쿠터 소스 프리팹을 찾을 수 없습니다: {ScooterSourcePrefabPath}");
+                return;
+            }
+
+            GameObject prefabRoot = PrefabUtility.LoadPrefabContents(FastVehiclePrefabPath);
+            if (prefabRoot == null)
+            {
+                Debug.LogError($"[KoreanStreetSetupTool] 대상 프리팹을 찾을 수 없습니다: {FastVehiclePrefabPath}");
+                return;
+            }
+
+            // 1. 기존 임시 큐브 렌더러/필터 제거
+            MeshFilter oldMf = prefabRoot.GetComponent<MeshFilter>();
+            if (oldMf != null) Object.DestroyImmediate(oldMf);
+
+            MeshRenderer oldMr = prefabRoot.GetComponent<MeshRenderer>();
+            if (oldMr != null) Object.DestroyImmediate(oldMr);
+
+            // 2. 기존 모든 자식 오브젝트 정리
+            for (int i = prefabRoot.transform.childCount - 1; i >= 0; i--)
+            {
+                Object.DestroyImmediate(prefabRoot.transform.GetChild(i).gameObject);
+            }
+
+            // 3. 스쿠터 3D 모델 인스턴스화
+            GameObject visual = Object.Instantiate(scooterSrc, prefabRoot.transform);
+            visual.name = "VisualModel";
+
+            BoxCollider visualCol = visual.GetComponent<BoxCollider>();
+            if (visualCol != null) Object.DestroyImmediate(visualCol);
+
+            // 질주 방향(+Z)에 맞춘 회전 및 위치 정규화
+            visual.transform.localPosition = Vector3.zero;
+            visual.transform.localRotation = Quaternion.identity;
+            visual.transform.localScale = Vector3.one * 1.15f;
+
+            // 4. 루트 트랜스폼 및 태그 세팅
+            prefabRoot.transform.localScale = Vector3.one;
+            prefabRoot.transform.localRotation = Quaternion.identity;
+            prefabRoot.tag = "Obstacle";
+
+            // 5. 루트 BoxCollider 정밀 설정
+            BoxCollider col = prefabRoot.GetComponent<BoxCollider>();
+            if (col == null) col = prefabRoot.AddComponent<BoxCollider>();
+            col.isTrigger = true;
+            col.size = new Vector3(0.48f, 0.90f, 0.85f);
+            col.center = new Vector3(0f, 0.45f, 0f);
+
+            FastMotorcycle fastMotorcycle = prefabRoot.GetComponent<FastMotorcycle>();
+            if (fastMotorcycle == null) fastMotorcycle = prefabRoot.AddComponent<FastMotorcycle>();
+
+            PrefabUtility.SaveAsPrefabAsset(prefabRoot, FastVehiclePrefabPath);
+            PrefabUtility.UnloadPrefabContents(prefabRoot);
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            Debug.Log("[KoreanStreetSetupTool] PF_Motorcycle ➡️ 초고속 전동 스쿠터(Scooter_1) 3D 모델 세팅 완료!");
+        }
+
+        [MenuItem("CampusRun/초고속 질주 차량 모델 세팅 (경찰차)")]
+        public static void SetupFastPoliceCarPrefab()
+        {
+            Debug.Log("[KoreanStreetSetupTool] === 초고속 경찰차(Police Car N_4) 프리팹 세팅 시작 ===");
+
+            GameObject policeSrc = AssetDatabase.LoadAssetAtPath<GameObject>(PoliceCarSourcePrefabPath);
+            if (policeSrc == null)
+            {
+                Debug.LogError($"[KoreanStreetSetupTool] 경찰차 소스 프리팹을 찾을 수 없습니다: {PoliceCarSourcePrefabPath}");
+                return;
+            }
+
+            GameObject prefabRoot = PrefabUtility.LoadPrefabContents(FastVehiclePrefabPath);
+            if (prefabRoot == null)
+            {
+                Debug.LogError($"[KoreanStreetSetupTool] 대상 프리팹을 찾을 수 없습니다: {FastVehiclePrefabPath}");
+                return;
+            }
+
+            // 1. 기존 임시 큐브 렌더러/필터 제거
+            MeshFilter oldMf = prefabRoot.GetComponent<MeshFilter>();
+            if (oldMf != null) Object.DestroyImmediate(oldMf);
+
+            MeshRenderer oldMr = prefabRoot.GetComponent<MeshRenderer>();
+            if (oldMr != null) Object.DestroyImmediate(oldMr);
+
+            // 2. 기존 모든 자식 오브젝트 정리
+            for (int i = prefabRoot.transform.childCount - 1; i >= 0; i--)
+            {
+                Object.DestroyImmediate(prefabRoot.transform.GetChild(i).gameObject);
+            }
+
+            // 3. 경찰차 3D 모델 인스턴스화
+            GameObject visual = Object.Instantiate(policeSrc, prefabRoot.transform);
+            visual.name = "VisualModel";
+
+            BoxCollider visualCol = visual.GetComponent<BoxCollider>();
+            if (visualCol != null) Object.DestroyImmediate(visualCol);
+
+            visual.transform.localPosition = Vector3.zero;
+            visual.transform.localRotation = Quaternion.identity;
+
+            // 원본 경찰차: 폭 2.13m, 높이 1.38m(경광등 포함), 길이 4.97m
+            // 0.38f 스케일 적용 -> 폭 0.81m, 높이 0.53m, 길이 1.89m
+            visual.transform.localScale = Vector3.one * 0.38f;
+
+            // 4. 루트 트랜스폼 및 태그 세팅
+            prefabRoot.transform.localScale = Vector3.one;
+            prefabRoot.transform.localRotation = Quaternion.identity;
+            prefabRoot.tag = "Obstacle";
+
+            // 5. 루트 BoxCollider 정밀 설정 (원본 1:1:1 비율에 완벽 일치)
+            BoxCollider col = prefabRoot.GetComponent<BoxCollider>();
+            if (col == null) col = prefabRoot.AddComponent<BoxCollider>();
+            col.isTrigger = true;
+            col.size = new Vector3(0.80f, 0.53f, 1.88f);
+            col.center = new Vector3(0f, 0.37f, -0.04f);
+
+            FastMotorcycle fastMotorcycle = prefabRoot.GetComponent<FastMotorcycle>();
+            if (fastMotorcycle == null) fastMotorcycle = prefabRoot.AddComponent<FastMotorcycle>();
+
+            PrefabUtility.SaveAsPrefabAsset(prefabRoot, FastVehiclePrefabPath);
+            PrefabUtility.UnloadPrefabContents(prefabRoot);
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            Debug.Log("[KoreanStreetSetupTool] PF_Motorcycle ➡️ 초고속 긴급 출동 경찰차(Police Car N_4) 3D 모델 세팅 완료!");
         }
 
         #endregion
