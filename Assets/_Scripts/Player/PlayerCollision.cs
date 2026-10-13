@@ -1,4 +1,5 @@
 using UnityEngine;
+using CampusRun.Effects;
 
 namespace CampusRun.Player
 {
@@ -38,37 +39,62 @@ namespace CampusRun.Player
                 string reason = _defaultDeathReason;
                 string objectName = hitObject.name;
 
-                if (objectName.Contains("Train") || objectName.Contains("Subway") || objectName.Contains("Motorcycle") || objectName.Contains("Bike"))
+                bool isWater = objectName.Contains("Puddle") || objectName.Contains("Water");
+                bool isHeavyVehicle = objectName.Contains("Train") || objectName.Contains("Subway") || objectName.Contains("Motorcycle") || objectName.Contains("Bike") || objectName.Contains("Police");
+
+                if (isHeavyVehicle)
                 {
-                    reason = "🚆 캠퍼스 관통 지상철(오토바이)에 치였습니다!";
+                    reason = "🚆 캠퍼스 관통 지상철(경찰차)에 치였습니다!";
+                    ImpactVFXManager.PlayCrashDebris(transform.position);
+                    CameraShake.ShakeOnHeavyCrash();
                 }
                 else if (objectName.Contains("Student") || objectName.Contains("Late"))
                 {
                     reason = "🏃 전력 질주하는 타과 지각생과 부딪혀 넘어졌습니다!";
+                    ImpactVFXManager.PlayCrashDebris(transform.position);
+                    CameraShake.ShakeOnCarCrash();
                 }
-                else if (objectName.Contains("Puddle") || objectName.Contains("Water"))
+                else if (isWater)
                 {
                     reason = "🌊 거대 물웅덩이에 빠져 옷을 모두 버렸습니다!";
+                    ImpactVFXManager.PlayWaterSplash(transform.position);
+                    CameraShake.ShakeOnWaterSplash();
                 }
                 else if (objectName.Contains("Bus") || objectName.Contains("Shuttle"))
                 {
                     reason = "💥 1교시 셔틀버스를 피하지 못했습니다!";
+                    ImpactVFXManager.PlayCrashDebris(transform.position);
+                    CameraShake.ShakeOnHeavyCrash();
                 }
                 else if (objectName.Contains("Laser") || objectName.Contains("Professor"))
                 {
                     reason = "⚡ 교수님의 기습 출석체크 레이저에 걸렸습니다!";
+                    ImpactVFXManager.PlayCrashDebris(transform.position);
+                    CameraShake.ShakeOnCarCrash();
                 }
                 else if (objectName.Contains("Bomb") || objectName.Contains("Assignment"))
                 {
                     reason = "💣 하늘에서 떨어진 과제 폭탄에 맞았습니다!";
+                    ImpactVFXManager.PlayCrashDebris(transform.position);
+                    CameraShake.ShakeOnHeavyCrash();
                 }
                 else if (objectName.Contains("Freerider"))
                 {
                     reason = "👥 조별과제 프리라이더에게 붙잡혔습니다!";
+                    ImpactVFXManager.PlayCrashDebris(transform.position);
+                    CameraShake.ShakeOnCarCrash();
                 }
                 else if (objectName.Contains("Missile") || objectName.Contains("GradeF"))
                 {
                     reason = "🚀 유도 F학점 미사일에 직격당했습니다!";
+                    ImpactVFXManager.PlayCrashDebris(transform.position);
+                    CameraShake.ShakeOnHeavyCrash();
+                }
+                else
+                {
+                    // 일반 차량 등 기본 충돌
+                    ImpactVFXManager.PlayCrashDebris(transform.position);
+                    CameraShake.ShakeOnCarCrash();
                 }
 
                 Debug.LogWarning($"[CampusRun] 충돌 발생! {reason}");
