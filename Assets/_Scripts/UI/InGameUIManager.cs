@@ -884,6 +884,9 @@ namespace CampusRun.UI
         {
             _isGameOver = false;
             HandleInactivityWarning(false);
+            AudioListener.pause = false;
+            AudioListener.volume = 1.0f;
+            CampusRun.Core.MonoSingleton<CampusRun.Audio.AudioManager>.ResetShutdownFlag();
             GameEvents.ClearAllSubscriptions();
             SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
         }

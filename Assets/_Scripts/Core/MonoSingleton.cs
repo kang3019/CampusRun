@@ -17,10 +17,18 @@ namespace CampusRun.Core
         {
             get
             {
+                // 유니티 플레이 모드 중에는 셧다운 플래그가 켜져 있어도 안전하게 자동 리셋 (도메인 리로드 꺼짐 대비)
                 if (_isShuttingDown)
                 {
-                    Debug.LogWarning($"[MonoSingleton] 어플리케이션 종료 중 인스턴스 접근 감지: {typeof(T).Name}");
-                    return null;
+                    if (Application.isPlaying)
+                    {
+                        _isShuttingDown = false;
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"[MonoSingleton] 어플리케이션 종료 중 인스턴스 접근 감지: {typeof(T).Name}");
+                        return null;
+                    }
                 }
 
                 lock (_lock)
@@ -39,8 +47,28 @@ namespace CampusRun.Core
             }
         }
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStaticState()
+        {
+            _instance = null;
+            _isShuttingDown = false;
+        }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        private static void ResetBeforeSceneLoad()
+        {
+            _isShuttingDown = false;
+        }
+
+        public static void ResetShutdownFlag()
+        {
+            _isShuttingDown = false;
+        }
+
         protected virtual void Awake()
         {
+            _isShuttingDown = false;
+
             if (_instance == null)
             {
                 _instance = this as T;

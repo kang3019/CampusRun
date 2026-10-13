@@ -1,11 +1,12 @@
 using System;
 using UnityEngine;
+using CampusRun.Audio;
 
 namespace CampusRun.Obstacles
 {
     /// <summary>
-    /// 원작 길건너 친구들의 '기차'에 해당하는 대학 캠퍼스 초고속 배달 오토바이 장애물입니다.
-    /// 바닥 붉은색 경고선 점멸 후 시속 25~35m/s의 초고속으로 도로를 질주합니다.
+    /// 원작 길건너 친구들의 '기차'에 해당하는 대학 캠퍼스 초고속 배달 오토바이(경찰차) 장애물입니다.
+    /// 3D 공간 음향이 탑재되어 멀리서 다가올 때부터 코앞을 쏜살같이 지나갈 때까지 입체적으로 사이렌 소리가 변화합니다.
     /// </summary>
     [SelectionBase]
     public class FastMotorcycle : MonoBehaviour
@@ -22,9 +23,32 @@ namespace CampusRun.Obstacles
         private float _currentSpeed = 30f;
         private bool _isActive = false;
         private Action<FastMotorcycle> _onDespawnCallback;
+        private AudioSource _audioSource;
 
-        public bool IsActive => _isActive;
-        public float Speed => _currentSpeed;
+        private void Awake()
+        {
+            SetupSpatialAudioSource();
+        }
+
+        private void SetupSpatialAudioSource()
+        {
+            if (_audioSource != null) return;
+
+            _audioSource = GetComponent<AudioSource>();
+            if (_audioSource == null)
+            {
+                _audioSource = gameObject.AddComponent<AudioSource>();
+            }
+
+            // 초고속 질주 및 쿼터뷰 시점에 최적화된 3D 공간 음향 설정
+            _audioSource.spatialBlend = 0.88f;
+            _audioSource.rolloffMode = AudioRolloffMode.Linear;
+            _audioSource.minDistance = 9.0f;  // 카메라/플레이어 앞을 지날 때 최대 100% 음량 보장
+            _audioSource.maxDistance = 60.0f; // 먼 거리에서부터 사이렌이 다가옴
+            _audioSource.dopplerLevel = 1.2f; // 초고속 질주 도플러 효과 강조
+            _audioSource.playOnAwake = false;
+            _audioSource.loop = true;
+        }
 
         /// <summary>
         /// 오브젝트 풀에서 꺼내질 때 오토바이의 진행 방향과 속도를 초기화합니다.
@@ -40,7 +64,30 @@ namespace CampusRun.Obstacles
             Vector3 lookDir = (_direction > 0) ? Vector3.right : Vector3.left;
             transform.rotation = Quaternion.LookRotation(lookDir, Vector3.up);
 
+            // [중요!] 먼저 오브젝트를 활성화해야 AudioSource.Play()가 안전하게 작동
             gameObject.SetActive(true);
+
+            // 3D 경찰차 사이렌 사운드 재생
+            Play3DPoliceSiren();
+        }
+
+        private void Play3DPoliceSiren()
+        {
+            if (_audioSource == null) return;
+
+            var audioMgr = AudioManager.Instance;
+            AudioClip policeClip = audioMgr != null ? audioMgr.PoliceCarClip : null;
+            if (policeClip == null)
+            {
+                policeClip = Resources.Load<AudioClip>("SFX/policecar");
+            }
+
+            if (policeClip != null)
+            {
+                _audioSource.clip = policeClip;
+                _audioSource.volume = 1.0f;
+                _audioSource.Play();
+            }
         }
 
         private void Update()
@@ -61,6 +108,11 @@ namespace CampusRun.Obstacles
         public void Despawn()
         {
             if (!_isActive) return;
+
+            if (_audioSource != null && _audioSource.isPlaying)
+            {
+                _audioSource.Stop();
+            }
 
             _isActive = false;
             gameObject.SetActive(false);
