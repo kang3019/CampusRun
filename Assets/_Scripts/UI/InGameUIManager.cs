@@ -309,7 +309,7 @@ namespace CampusRun.UI
                 _warningBannerText.fontStyle = FontStyle.Bold;
                 _warningBannerText.color = new Color(1f, 0.35f, 0.1f);
                 _warningBannerText.alignment = TextAnchor.MiddleCenter;
-                _warningBannerText.text = "⚠️ 지각 위기! 교수님이 다가옵니다!";
+                _warningBannerText.text = "[!] 지각 위기! 교수님이 다가옵니다!";
 
                 Shadow bannerShadow = bannerObj.AddComponent<Shadow>();
                 bannerShadow.effectColor = new Color(0f, 0f, 0f, 0.9f);
@@ -486,7 +486,7 @@ namespace CampusRun.UI
                 rankBtnText.fontStyle = FontStyle.Bold;
                 rankBtnText.color = Color.white;
                 rankBtnText.alignment = TextAnchor.MiddleCenter;
-                rankBtnText.text = "🏆 랭킹 (Tab)";
+                rankBtnText.text = "★ 랭킹 (Tab)";
 
                 _gameOverPanel.SetActive(false);
             }
@@ -538,7 +538,7 @@ namespace CampusRun.UI
             badgeText.fontStyle = FontStyle.Bold;
             badgeText.color = new Color(1f, 0.72f, 0.22f); // 따뜻한 골드 오렌지
             badgeText.alignment = TextAnchor.MiddleCenter;
-            badgeText.text = "⚡ CAMPUS SURVIVAL RUN ⚡";
+            badgeText.text = "★ CAMPUS SURVIVAL RUN ★";
             Shadow badgeShadow = badgeObj.AddComponent<Shadow>();
             badgeShadow.effectColor = new Color(0f, 0f, 0f, 0.9f);
             badgeShadow.effectDistance = new Vector2(2f, -2f);
@@ -619,7 +619,7 @@ namespace CampusRun.UI
             _keyGuideText.alignment = TextAnchor.MiddleCenter;
             _keyGuideText.text = "[ ↑ / W ] 전진     [ ← / A ] 좌측     [ → / D ] 우측     [ ↓ / S ] 후퇴";
 
-            // 5. 🏆 TOP 5 랭킹 버튼 (타이틀 화면 하단)
+            // 5. ★ TOP 5 랭킹 버튼 (타이틀 화면 하단)
             GameObject titleRankBtnObj = new GameObject("TitleLeaderboard_Button");
             titleRankBtnObj.transform.SetParent(titlePanelObj.transform, false);
             RectTransform titleRankBtnRect = titleRankBtnObj.AddComponent<RectTransform>();
@@ -653,7 +653,7 @@ namespace CampusRun.UI
             titleRankText.fontStyle = FontStyle.Bold;
             titleRankText.color = new Color(1f, 0.85f, 0.2f);
             titleRankText.alignment = TextAnchor.MiddleCenter;
-            titleRankText.text = "🏆 TOP 5 랭킹 (Tab)";
+            titleRankText.text = "★ TOP 5 랭킹 (Tab)";
         }
 
         /// <summary>
@@ -871,11 +871,11 @@ namespace CampusRun.UI
 
             if (remainingSeconds <= 1.0f)
             {
-                _warningBannerText.text = $"🚨 출석 마감 직전! ({remainingSeconds:0.0}초)";
+                _warningBannerText.text = $"[!!] 출석 마감 직전! ({remainingSeconds:0.0}초)";
             }
             else
             {
-                _warningBannerText.text = $"⚠️ 지각 위기! 교수님이 다가옵니다! ({remainingSeconds:0.0}초)";
+                _warningBannerText.text = $"[!] 지각 위기! 교수님이 다가옵니다! ({remainingSeconds:0.0}초)";
             }
         }
 

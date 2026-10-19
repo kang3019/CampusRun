@@ -218,7 +218,7 @@ namespace CampusRun.Player
             // 카메라의 기준 진행도보다 플레이어가 화면 아래로 너무 많이 밀려났을 때
             if (_target.position.z < _currentBaseZ - _deathBehindThreshold)
             {
-                string reason = "🦅 교수님의 매의 눈: 1교시 지각으로 F학점을 받았습니다!";
+                string reason = "[!] 교수님의 매의 눈: 1교시 지각으로 F학점을 받았습니다!";
                 Debug.LogWarning($"[CampusRun] {reason} (기준 진행도: {_currentBaseZ:F1}m, 플레이어 위치: {_target.position.z:F1}m)");
                 _playerController.Die(reason);
             }
