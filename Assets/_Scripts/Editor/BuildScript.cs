@@ -20,6 +20,9 @@ namespace CampusRun.EditorTools
         {
             Debug.Log("[BuildScript] === 축제 부스 전시용 Windows 64비트 빌드 시작 ===");
 
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
             // 1. 빌드 씬 확인 및 설정
             if (!File.Exists(MainScenePath))
             {

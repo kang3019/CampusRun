@@ -183,7 +183,7 @@ namespace CampusRun.Leaderboard
             titleText.fontStyle = FontStyle.Bold;
             titleText.alignment = TextAnchor.MiddleCenter;
             titleText.color = new Color(1f, 0.85f, 0.2f);
-            titleText.text = "🏆 명예의 전당 (TOP 5 랭킹) 🏆";
+            titleText.text = "★ 명예의 전당 (TOP 5 랭킹) ★";
 
             Shadow titleShadow = titleObj.AddComponent<Shadow>();
             titleShadow.effectColor = Color.black;
@@ -369,7 +369,7 @@ namespace CampusRun.Leaderboard
             titleText.fontStyle = FontStyle.Bold;
             titleText.alignment = TextAnchor.MiddleCenter;
             titleText.color = new Color(1f, 0.88f, 0.2f);
-            titleText.text = "🎉 명예의 전당 TOP 5 진입! 🎉";
+            titleText.text = "★ 명예의 전당 TOP 5 진입! ★";
 
             // 기록 안내 텍스트
             GameObject promptObj = new GameObject("Prompt_Text");
@@ -531,7 +531,7 @@ namespace CampusRun.Leaderboard
                     var entry = entries[i];
                     Color rankColor = (i == 0) ? gold : (i == 1) ? silver : (i == 2) ? bronze : normal;
 
-                    string medal = (i == 0) ? "🥇 1st" : (i == 1) ? "🥈 2nd" : (i == 2) ? "🥉 3rd" : $"{i + 1}th";
+                    string medal = (i == 0) ? "★ 1st" : (i == 1) ? "★ 2nd" : (i == 2) ? "★ 3rd" : $"{i + 1}th";
                     _rankTexts[i].text = medal;
                     _rankTexts[i].color = rankColor;
 
