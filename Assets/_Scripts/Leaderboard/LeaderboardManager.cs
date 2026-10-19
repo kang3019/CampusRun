@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -6,16 +7,30 @@ namespace CampusRun.Leaderboard
 {
     /// <summary>
     /// 인게임 로컬 TOP 5 랭킹 데이터의 저장, 조회 및 정렬을 관리하는 매니저 클래스입니다.
-    /// PlayerPrefs를 통해 영구 저장되며, 부스 전시 환경에서 재시작 시에도 유지됩니다.
+    /// 로컬 JSON 파일(Application.persistentDataPath)과 PlayerPrefs에 이중 영구 저장되어 앱 재시작 시에도 100% 유지됩니다.
     /// </summary>
     public class LeaderboardManager : MonoBehaviour
     {
         public static LeaderboardManager Instance { get; private set; }
 
         private const string PrefsKey = "CampusRun_Leaderboard_JSON";
+        private const string FileName = "CampusRun_Leaderboard.json";
         private const int MaxEntries = 5;
 
         private LeaderboardData _data;
+        private string _saveFilePath;
+
+        public string SaveFilePath
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(_saveFilePath))
+                {
+                    _saveFilePath = Path.Combine(Application.persistentDataPath, FileName);
+                }
+                return _saveFilePath;
+            }
+        }
 
         public event Action OnLeaderboardUpdated;
 
@@ -43,12 +58,37 @@ namespace CampusRun.Leaderboard
             LoadLeaderboard();
         }
 
+        private void OnApplicationQuit()
+        {
+            SaveLeaderboard();
+        }
+
         /// <summary>
-        /// PlayerPrefs에서 랭킹 데이터를 로드합니다. 데이터가 없으면 재미있는 기본 더미 랭킹을 생성합니다.
+        /// 로컬 JSON 파일 및 PlayerPrefs에서 랭킹 데이터를 로드합니다. 데이터가 없으면 기본 더미 랭킹을 생성합니다.
         /// </summary>
         public void LoadLeaderboard()
         {
-            string json = PlayerPrefs.GetString(PrefsKey, string.Empty);
+            string json = string.Empty;
+
+            // 1순위: 로컬 JSON 파일에서 로드
+            try
+            {
+                if (File.Exists(SaveFilePath))
+                {
+                    json = File.ReadAllText(SaveFilePath);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[LeaderboardManager] 로컬 랭킹 파일 읽기 실패: {ex.Message}");
+            }
+
+            // 2순위: 파일이 없으면 PlayerPrefs에서 로드
+            if (string.IsNullOrEmpty(json))
+            {
+                json = PlayerPrefs.GetString(PrefsKey, string.Empty);
+            }
+
             if (!string.IsNullOrEmpty(json))
             {
                 try
@@ -70,14 +110,27 @@ namespace CampusRun.Leaderboard
         }
 
         /// <summary>
-        /// 현재 랭킹 데이터를 PlayerPrefs에 저장합니다.
+        /// 현재 랭킹 데이터를 로컬 JSON 파일과 PlayerPrefs 양쪽에 영구 저장합니다.
         /// </summary>
         public void SaveLeaderboard()
         {
             if (_data == null) return;
-            string json = JsonUtility.ToJson(_data);
+            string json = JsonUtility.ToJson(_data, true);
+
+            // 1. PlayerPrefs 저장
             PlayerPrefs.SetString(PrefsKey, json);
             PlayerPrefs.Save();
+
+            // 2. 로컬 JSON 파일 영구 저장
+            try
+            {
+                File.WriteAllText(SaveFilePath, json);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[LeaderboardManager] 로컬 랭킹 파일 저장 실패: {ex.Message}");
+            }
+
             OnLeaderboardUpdated?.Invoke();
         }
 

@@ -67,6 +67,7 @@ namespace CampusRun.Track
 
         // 런타임 캐싱
         private MeshRenderer _meshRenderer;
+        private StationaryObstacle _cachedSideTreePrefab;
 
         // [핵심!] SafeLane의 Transform 스케일(20, 0.2, 1) 왜곡을 장애물이 상속받지 않도록 독립 컨테이너 사용
         private static Transform _obstacleRootContainer;
@@ -89,6 +90,12 @@ namespace CampusRun.Track
 
         private readonly List<int> _availableXPositions = new List<int>();
         private static int _lastSpawnedX = 999;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics()
+        {
+            HandleGameRestarted();
+        }
 
         private static Transform GetOrCreateObstacleContainer()
         {
@@ -128,7 +135,24 @@ namespace CampusRun.Track
         {
             _isSafeLane = true;
             _meshRenderer = GetComponent<MeshRenderer>();
+            CacheSideTreePrefab();
             InitializeStreetLightPool();
+        }
+
+        private void CacheSideTreePrefab()
+        {
+            _cachedSideTreePrefab = _sideTreePrefab;
+            if (_cachedSideTreePrefab == null && _obstaclePrefabs != null)
+            {
+                for (int i = 0; i < _obstaclePrefabs.Length; i++)
+                {
+                    if (_obstaclePrefabs[i] != null && _obstaclePrefabs[i].name.Contains("Tree"))
+                    {
+                        _cachedSideTreePrefab = _obstaclePrefabs[i];
+                        break;
+                    }
+                }
+            }
         }
 
         private void OnEnable()
@@ -143,14 +167,20 @@ namespace CampusRun.Track
 
         private static void HandleGameRestarted()
         {
-            try { _sharedStreetLightPool?.Clear(); } catch { }
-            _sharedStreetLightPool = null;
-
-            foreach (var kvp in _sharedObstaclePools)
+            if (_sharedStreetLightPool != null)
             {
-                try { kvp.Value?.Clear(); } catch { }
+                try { _sharedStreetLightPool.Clear(); } catch { }
+                _sharedStreetLightPool = null;
             }
-            _sharedObstaclePools.Clear();
+
+            if (_sharedObstaclePools.Count > 0)
+            {
+                foreach (var kvp in _sharedObstaclePools)
+                {
+                    try { kvp.Value?.Clear(); } catch { }
+                }
+                _sharedObstaclePools.Clear();
+            }
 
             _obstacleRootContainer = null;
             _decorRootContainer = null;
@@ -172,8 +202,8 @@ namespace CampusRun.Track
                 actionOnRelease: (obj) => { if (obj != null) obj.SetActive(false); },
                 actionOnDestroy: (obj) => { if (obj != null) Destroy(obj); },
                 collectionCheck: false,
-                defaultCapacity: 6,
-                maxSize: 20
+                defaultCapacity: 10,
+                maxSize: 40
             );
         }
 
@@ -182,10 +212,17 @@ namespace CampusRun.Track
             if (prefab == null) return null;
             if (_sharedObstaclePools.TryGetValue(prefab, out var pool) && pool != null) return pool;
 
+            // 사이드 가로수(Tree)는 한 레인당 10그루씩 약 20~25개 레인에 동시 배치되므로 풀 용량을 넉넉히 확보하여
+            // 점프 시 실시간 Instantiate / Destroy로 인한 프레임 드랍(렉)을 완벽히 제거합니다.
+            bool isTree = prefab == _cachedSideTreePrefab || prefab.name.Contains("Tree");
+            int defaultCap = isTree ? 150 : 16;
+            int maxCap = isTree ? 350 : 60;
+
             Transform container = GetOrCreateObstacleContainer();
             pool = new ObjectPool<StationaryObstacle>(
                 createFunc: () =>
                 {
+                    if (container == null) container = GetOrCreateObstacleContainer();
                     StationaryObstacle obs = Instantiate(prefab, container);
                     obs.gameObject.SetActive(false);
                     return obs;
@@ -194,8 +231,8 @@ namespace CampusRun.Track
                 actionOnRelease: (obs) => { if (obs != null) obs.gameObject.SetActive(false); },
                 actionOnDestroy: (obs) => { if (obs != null) Destroy(obs.gameObject); },
                 collectionCheck: false,
-                defaultCapacity: 4,
-                maxSize: 15
+                defaultCapacity: defaultCap,
+                maxSize: maxCap
             );
             _sharedObstaclePools[prefab] = pool;
             return pool;
@@ -246,23 +283,12 @@ namespace CampusRun.Track
         {
             if (!_enableSideTrees) return;
 
-            StationaryObstacle treePrefab = _sideTreePrefab;
-            if (treePrefab == null)
+            if (_cachedSideTreePrefab == null)
             {
-                // _obstaclePrefabs에서 Tree 이름을 가진 프리팹 자동 탐색
-                if (_obstaclePrefabs != null)
-                {
-                    for (int i = 0; i < _obstaclePrefabs.Length; i++)
-                    {
-                        if (_obstaclePrefabs[i] != null && _obstaclePrefabs[i].name.Contains("Tree"))
-                        {
-                            treePrefab = _obstaclePrefabs[i];
-                            break;
-                        }
-                    }
-                }
+                CacheSideTreePrefab();
             }
 
+            StationaryObstacle treePrefab = _cachedSideTreePrefab;
             if (treePrefab == null) return;
 
             var pool = GetOrCreateObstaclePool(treePrefab);
@@ -298,13 +324,14 @@ namespace CampusRun.Track
                 Vector3 spawnPos = new Vector3(spawnX, 0.10f, LaneZIndex);
                 _activeObstacleInfos.Add(new SpawnedObstacleInfo { Obstacle = tree, Pool = pool });
 
+                // 플레이어 이동 반경(±4칸) 바깥의 배경 가로수는 외형은 그대로 유지하되 물리 Collider만 꺼서 물리 엔진 부하를 제거합니다.
                 tree.Initialize(spawnPos, (obs) =>
                 {
                     if (pool != null && obs != null)
                     {
                         pool.Release(obs);
                     }
-                });
+                }, enableCollider: false);
 
                 // 가로수의 자연스러운 회전 변화 (Y축 회전)
                 float randomRotY = (LaneZIndex * 47f + i * 31f) % 360f;

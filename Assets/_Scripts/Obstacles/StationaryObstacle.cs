@@ -17,18 +17,28 @@ namespace CampusRun.Obstacles
 
         private Action<StationaryObstacle> _onRecycleCallback;
         private bool _isSpawned = false;
+        private Collider _collider;
 
         public string ObstacleName => _obstacleName;
         public bool IsSpawned => _isSpawned;
 
+        private void Awake()
+        {
+            _collider = GetComponent<Collider>();
+        }
+
         /// <summary>
         /// 풀에서 꺼내져 지정한 그리드 위치에 배치될 때 초기화합니다.
         /// </summary>
-        public void Initialize(Vector3 spawnPosition, Action<StationaryObstacle> onRecycle)
+        public void Initialize(Vector3 spawnPosition, Action<StationaryObstacle> onRecycle, bool enableCollider = true)
         {
             transform.position = spawnPosition;
             _onRecycleCallback = onRecycle;
             _isSpawned = true;
+            if (_collider != null)
+            {
+                _collider.enabled = enableCollider;
+            }
             gameObject.SetActive(true);
         }
 
