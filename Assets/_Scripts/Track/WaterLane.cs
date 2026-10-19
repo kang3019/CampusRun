@@ -36,12 +36,28 @@ namespace CampusRun.Track
         private float _currentSpeed = 3.5f;
         private Coroutine _spawnRoutine;
 
-        // 널판지 오브젝트 풀
-        private IObjectPool<FloatingPlank> _plankPool;
+        // 널판지 전역 공유 오브젝트 풀 (모든 WaterLane이 공유하여 중복 생성 방지)
+        private static IObjectPool<FloatingPlank> _sharedPlankPool;
         private readonly List<FloatingPlank> _activePlanks = new List<FloatingPlank>();
 
         // [핵심!] WaterLane의 Transform 스케일(20, 0.12, 1) 왜곡을 널판지가 상속받지 않도록 독립 컨테이너 사용
         private static Transform _plankRootContainer;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics()
+        {
+            ClearSharedPool();
+        }
+
+        public static void ClearSharedPool()
+        {
+            if (_sharedPlankPool != null)
+            {
+                try { _sharedPlankPool.Clear(); } catch { }
+                _sharedPlankPool = null;
+            }
+            _plankRootContainer = null;
+        }
 
         private static Transform GetOrCreateContainer()
         {
@@ -66,38 +82,46 @@ namespace CampusRun.Track
         private void Awake()
         {
             _isSafeLane = false;
-            InitializePool();
+            EnsureSharedPool();
         }
 
-        private void InitializePool()
+        private void OnEnable()
         {
-            if (_plankPrefab == null) return;
+            CampusRun.Core.GameEvents.OnGameRestarted += ClearSharedPool;
+        }
+
+        private void OnDisable()
+        {
+            CampusRun.Core.GameEvents.OnGameRestarted -= ClearSharedPool;
+        }
+
+        private void EnsureSharedPool()
+        {
+            if (_plankPrefab == null || _sharedPlankPool != null) return;
 
             Transform container = GetOrCreateContainer();
+            FloatingPlank prefabRef = _plankPrefab;
 
-            _plankPool = new ObjectPool<FloatingPlank>(
+            _sharedPlankPool = new ObjectPool<FloatingPlank>(
                 createFunc: () =>
                 {
-                    FloatingPlank plank = Instantiate(_plankPrefab, container);
+                    if (container == null) container = GetOrCreateContainer();
+                    FloatingPlank plank = Instantiate(prefabRef, container);
                     plank.gameObject.SetActive(false);
                     return plank;
                 },
-                actionOnGet: (plank) =>
-                {
-                    _activePlanks.Add(plank);
-                },
+                actionOnGet: (plank) => { },
                 actionOnRelease: (plank) =>
                 {
-                    _activePlanks.Remove(plank);
-                    plank.gameObject.SetActive(false);
+                    if (plank != null) plank.gameObject.SetActive(false);
                 },
                 actionOnDestroy: (plank) =>
                 {
                     if (plank != null) Destroy(plank.gameObject);
                 },
-                collectionCheck: true,
-                defaultCapacity: 6,
-                maxSize: 18
+                collectionCheck: false,
+                defaultCapacity: 12,
+                maxSize: 36
             );
         }
 
@@ -125,10 +149,7 @@ namespace CampusRun.Track
 
             _currentSpeed = Random.Range(_minSpeed, _maxSpeed);
 
-            if (_plankPool == null)
-            {
-                InitializePool();
-            }
+            EnsureSharedPool();
 
             // [핵심] 레인이 생성되자마자 플레이어가 건널 수 있도록 레인 위에 널판지 1~2개를 미리 배치
             PrewarmPlanks();
@@ -140,7 +161,7 @@ namespace CampusRun.Track
 
         private void PrewarmPlanks()
         {
-            if (_plankPool == null) return;
+            if (_sharedPlankPool == null) return;
 
             // 중앙 부근 및 진입로 주변에 널판지 2개 사전 배치
             float firstX = (_currentDirection > 0) ? -2f : 2f;
@@ -162,9 +183,10 @@ namespace CampusRun.Track
 
             for (int i = _activePlanks.Count - 1; i >= 0; i--)
             {
-                if (_activePlanks[i] != null && _plankPool != null)
+                FloatingPlank plank = _activePlanks[i];
+                if (plank != null && _sharedPlankPool != null)
                 {
-                    _plankPool.Release(_activePlanks[i]);
+                    _sharedPlankPool.Release(plank);
                 }
             }
             _activePlanks.Clear();
@@ -184,16 +206,32 @@ namespace CampusRun.Track
 
         private void SpawnPlankAt(float xPos)
         {
-            if (_plankPrefab == null || _plankPool == null) return;
+            EnsureSharedPool();
+            if (_plankPrefab == null || _sharedPlankPool == null) return;
 
-            FloatingPlank plank = _plankPool.Get();
+            FloatingPlank plank = null;
+            try
+            {
+                plank = _sharedPlankPool.Get();
+            }
+            catch
+            {
+                _sharedPlankPool = null;
+                EnsureSharedPool();
+                if (_sharedPlankPool != null) plank = _sharedPlankPool.Get();
+            }
+
+            if (plank == null) return;
+
+            _activePlanks.Add(plank);
             plank.transform.position = new Vector3(xPos, 0.15f, LaneZIndex);
 
             plank.Initialize(_currentDirection, _currentSpeed, (p) =>
             {
-                if (gameObject.activeInHierarchy && _plankPool != null)
+                _activePlanks.Remove(p);
+                if (p != null && _sharedPlankPool != null)
                 {
-                    _plankPool.Release(p);
+                    _sharedPlankPool.Release(p);
                 }
             });
         }
