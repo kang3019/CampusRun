@@ -113,6 +113,15 @@ namespace CampusRun.Effects
         }
 
         /// <summary>
+        /// 피격/충돌 시 기본 쉐이크 프리셋
+        /// </summary>
+        public static void ShakeOnHit()
+        {
+            Shake(0.4f, 0.3f);
+            DoHitStop(0.05f, 0.05f);
+        }
+
+        /// <summary>
         /// 일반 차량 충돌 시 묵직한 쉐이크 프리셋
         /// </summary>
         public static void ShakeOnCarCrash()

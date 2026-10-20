@@ -310,7 +310,7 @@ namespace CampusRun.Audio
             }
 
             // 경쾌하게 튀는 통통(통통/톡) 도약 사운드
-            float randomPitch = Random.Range(1.02f, 1.18f);
+            float randomPitch = Random.Range(_hopPitchMin, _hopPitchMax);
             PlaySFX(clipToPlay, 1.20f * _hopVolume, randomPitch);
         }
 

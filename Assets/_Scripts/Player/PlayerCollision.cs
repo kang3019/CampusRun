@@ -50,18 +50,19 @@ namespace CampusRun.Player
 
                 Debug.LogWarning($"[CampusRun] 충돌 발생! {reason} (충돌 오브젝트: {hitObject.name})");
 
-                // 차량(승용차, 트럭, 버스, 경찰차, 오토바이 등) 충돌 시 -> 끼이익! 쾅!! (carbreak.wav) 사운드 재생
+                // 차량(승용차, 트럭, 버스, 경찰차, 오토바이 등) 충돌 시 -> 끼이익! 쾅!! (carbreak.wav) 사운드 및 강력 진동
                 if (IsVehicle(hitObject, obstacleType))
                 {
                     AudioManager.Instance.PlayCarBreakSound();
+                    CameraShake.ShakeOnCarCrash();
                 }
                 else
                 {
                     AudioManager.Instance.PlayHitSound();
+                    CameraShake.ShakeOnHit();
                 }
 
-                // 충돌 시 카메라 흔들림 및 파편 VFX 재생
-                CameraShake.ShakeOnHit();
+                // 충돌 시 파편 VFX 재생
                 ImpactVFXManager.PlayCrashDebris(transform.position);
 
                 _playerController.Die(reason);
