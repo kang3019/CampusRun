@@ -102,6 +102,8 @@ namespace CampusRun.Player
         private bool _isSwiping = false;
         private const float MinSwipeDistance = 40f;
 
+        public static GridPlayerController Instance { get; private set; }
+
         public int CurrentGridX => _currentGridX;
         public int CurrentGridZ => _currentGridZ;
         public int MaxReachedZ => _maxReachedGridZ;
@@ -109,6 +111,8 @@ namespace CampusRun.Player
 
         private void Awake()
         {
+            Instance = this;
+
             if (_visualModelTransform == null && transform.childCount > 0)
             {
                 _visualModelTransform = transform.GetChild(0);
@@ -130,6 +134,14 @@ namespace CampusRun.Player
 
             // 오디오 매니저 기동 (씬에 프리팹이 없더라도 자동 기동)
             _ = AudioManager.Instance;
+        }
+
+        private void OnDestroy()
+        {
+            if (Instance == this)
+            {
+                Instance = null;
+            }
         }
 
         private void OnEnable()

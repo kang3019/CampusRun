@@ -48,11 +48,16 @@ namespace CampusRun.Audio
         [Range(0f, 1f)]
         [SerializeField] private float _vehicleSoundVolume = 0.75f;
 
+        [Tooltip("차량 경적/클락션음 기본 볼륨 (너무 튀지 않도록 조절)")]
+        [Range(0f, 1f)]
+        [SerializeField] private float _carKlaxonVolume = 0.45f;
+
         [Range(0f, 1f)]
         [SerializeField] private float _policeCarVolume = 0.95f;
 
         public AudioClip CarEngineClip => _customCarEngineClip;
         public AudioClip CarKlaxonClip => _customCarKlaxonClip;
+        public float CarKlaxonVolume => _carKlaxonVolume;
         public AudioClip PoliceCarClip => _customPoliceCarClip;
 
         [Header("--- 4. 충돌 및 사망 효과음 ---")]
