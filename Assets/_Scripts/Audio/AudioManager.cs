@@ -61,8 +61,13 @@ namespace CampusRun.Audio
         public AudioClip PoliceCarClip => _customPoliceCarClip;
 
         [Header("--- 4. 충돌 및 사망 효과음 ---")]
+        [Tooltip("차량 충돌 급브레이크 및 쾅 충격음 (carbreak.wav)")]
+        [SerializeField] private AudioClip _customCarBreakClip;
+
         [Tooltip("차량/장애물 충돌 사운드")]
         [SerializeField] private AudioClip _customHitClip;
+
+        public AudioClip CarBreakClip => _customCarBreakClip;
 
         [Tooltip("물에 빠짐(익사) 사운드")]
         [SerializeField] private AudioClip _customSplashClip;
@@ -197,6 +202,11 @@ namespace CampusRun.Audio
             if (_customPoliceCarClip == null)
             {
                 _customPoliceCarClip = Resources.Load<AudioClip>("SFX/policecar");
+            }
+
+            if (_customCarBreakClip == null)
+            {
+                _customCarBreakClip = Resources.Load<AudioClip>("SFX/carbreak");
             }
         }
 
@@ -358,6 +368,22 @@ namespace CampusRun.Audio
             if (_customPoliceCarClip != null)
             {
                 PlaySFX(_customPoliceCarClip, _policeCarVolume, 1.0f);
+            }
+        }
+
+        /// <summary>
+        /// 차량(승용차, 트럭, 버스, 경찰차 등)과 충돌 시 '끼이익! 쾅!!' 급제동 및 충돌음(carbreak.wav)을 재생합니다.
+        /// </summary>
+        public void PlayCarBreakSound()
+        {
+            AudioClip clip = _customCarBreakClip != null ? _customCarBreakClip : Resources.Load<AudioClip>("SFX/carbreak");
+            if (clip != null)
+            {
+                PlaySFX(clip, 1.0f, Random.Range(0.96f, 1.04f));
+            }
+            else
+            {
+                PlayHitSound();
             }
         }
 
