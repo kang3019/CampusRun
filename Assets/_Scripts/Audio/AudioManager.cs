@@ -28,12 +28,23 @@ namespace CampusRun.Audio
         [SerializeField] private float _hopPitchMax = 1.07f;
 
         [Header("--- 2. 통나무 착지 효과음 ---")]
-        [Tooltip("통나무/부유판 착지 사운드 (wood1.wav)")]
+        [Tooltip("통나무/부유판 착지 나무 사운드 (wood1.wav)")]
         [SerializeField] private AudioClip _customWoodPlankClip;
 
-        [Tooltip("통나무 착지 사운드 볼륨 (0.0 ~ 1.0)")]
-        [Range(0f, 1f)]
-        [SerializeField] private float _woodPlankVolume = 1.0f;
+        [Tooltip("통나무 착지 시 첨벙~ 물 튀김 사운드 (splash.wav)")]
+        [SerializeField] private AudioClip _customLogSplashClip;
+
+        [Tooltip("통나무 착지 나무 사운드 볼륨 (0.0 ~ 2.0)")]
+        [Range(0f, 2f)]
+        [SerializeField] private float _woodPlankVolume = 0.85f;
+
+        [Tooltip("통나무 착지 첨벙~ 물 튀김 볼륨 (0.0 ~ 2.0)")]
+        [Range(0f, 2f)]
+        [SerializeField] private float _logSplashVolume = 1.35f;
+
+        public AudioClip WoodPlankClip => _customWoodPlankClip;
+        public AudioClip LogSplashClip => _customLogSplashClip;
+        public float LogSplashVolume => _logSplashVolume;
 
         [Header("--- 3. 차량 및 경찰차 효과음 ---")]
         [Tooltip("차량 주행 엔진음 (car_engine.wav)")]
@@ -213,6 +224,16 @@ namespace CampusRun.Audio
             {
                 _customCarBreakClip = Resources.Load<AudioClip>("SFX/carbreak");
             }
+
+            if (_customLogSplashClip == null)
+            {
+                _customLogSplashClip = Resources.Load<AudioClip>("SFX/splash");
+            }
+
+            if (_customSplashClip == null)
+            {
+                _customSplashClip = Resources.Load<AudioClip>("SFX/splash");
+            }
         }
 
         private void OnEnable()
@@ -320,23 +341,39 @@ namespace CampusRun.Audio
         }
 
         /// <summary>
-        /// 하천의 통나무/부유판에 플레이어가 안착했을 때 효과음(wood1.wav)을 귀에 확실히 꽂히도록 시원한 볼륨으로 재생합니다.
+        /// 하천의 통나무/부유판에 플레이어가 안착했을 때 효과음(첨벙~ 물 튀김 + 나무 착지음)을 재생합니다.
         /// </summary>
         public void PlayWoodPlankSound()
         {
-            if (_customWoodPlankClip == null)
+            if (_customWoodPlankClip == null || _customLogSplashClip == null)
             {
                 LoadDefaultResourcesAudio();
             }
 
-            AudioClip clip = _customWoodPlankClip != null ? _customWoodPlankClip : _proceduralWoodPlankClip;
-            if (clip == null) return;
+            // 1. [핵심] 통나무 착지 시 '첨벙~' 물 튀김 효과음 재생
+            AudioClip splashClip = _customLogSplashClip != null ? _customLogSplashClip 
+                : (_customSplashClip != null ? _customSplashClip : _proceduralSplashClip);
+            if (splashClip != null)
+            {
+                float splashPitch = Random.Range(0.97f, 1.05f);
+                PlaySFX(splashClip, 1.35f * _logSplashVolume, splashPitch);
+            }
 
-            float randomPitch = Random.Range(0.96f, 1.05f);
+            // 2. 통나무 착지 나무 판자음(wood1.wav) 서브 레이어링 (묵직한 안착감 보강)
+            AudioClip woodClip = _customWoodPlankClip != null ? _customWoodPlankClip : _proceduralWoodPlankClip;
+            if (woodClip != null)
+            {
+                float woodPitch = Random.Range(0.96f, 1.04f);
+                PlaySFX(woodClip, 0.70f * _woodPlankVolume, woodPitch);
+            }
+        }
 
-            // 통나무 착지음이 다른 환경음에 묻히지 않도록 확실한 볼륨으로 더블 임팩트 재생
-            PlaySFX(clip, 1.35f * _woodPlankVolume, randomPitch);
-            PlaySFX(clip, 1.10f * _woodPlankVolume, randomPitch * 0.94f);
+        /// <summary>
+        /// 통나무 착지 전용 첨벙~ 물 튀김 효과음을 재생합니다.
+        /// </summary>
+        public void PlayLogSplashSound()
+        {
+            PlayWoodPlankSound();
         }
 
         private float _lastVehicleSoundTime = -10f;
