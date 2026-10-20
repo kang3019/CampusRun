@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using CampusRun.Audio;
+using CampusRun.Player;
 
 namespace CampusRun.Obstacles
 {
@@ -26,6 +27,30 @@ namespace CampusRun.Obstacles
         [Tooltip("길의 양 끝에 도달 시 사라지는 X축 경계선 (도로 폭 60m 기준 ±28.0m)")]
         [SerializeField] private float _despawnBoundaryX = 28.0f;
 
+        [Header("--- 경적(클락션) 설정 ---")]
+        [Tooltip("플레이어가 바로 앞뒤 레인에 있을 때 경적을 울릴 확률 (기본 0.10 = 10%)")]
+        [Range(0f, 1f)]
+        [SerializeField] private float _honkChance = 0.10f;
+
+        [Tooltip("경적 소리 볼륨 (기존 1.0 -> 0.45로 대폭 완화)")]
+        [Range(0f, 1f)]
+        [SerializeField] private float _honkVolume = 0.45f;
+
+        [Tooltip("플레이어와 Z축(레인) 거리가 이 값 이내일 때만 경적 발생 (단위: m, 기본 2.5m = 앞뒤 2칸)")]
+        [SerializeField] private float _honkTriggerZDistance = 2.5f;
+
+        [Tooltip("전체 차량 경적 전역 최소 쿨다운 (초, 연속 소음 방지)")]
+        [SerializeField] private float _honkGlobalCooldown = 4.0f;
+
+        // 전역 경적 쿨다운 관리 (GC 할당 0)
+        private static float s_nextGlobalHonkTime = 0f;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetHonkStatics()
+        {
+            s_nextGlobalHonkTime = 0f;
+        }
+
         private Action<MovingVehicle> _onDespawnCallback;
         private bool _isActive = false;
         private AudioSource _audioSource;
@@ -46,12 +71,12 @@ namespace CampusRun.Obstacles
                 _audioSource = gameObject.AddComponent<AudioSource>();
             }
 
-            // 쿼터뷰 카메라(X=0, Y=6.4m, Z=-6.8m)에 최적화된 3D 공간 음향
-            _audioSource.spatialBlend = 0.88f;             // 88% 3D 입체 음향 (좌우 패닝 및 거리감 생생 유지)
+            // 쿼터뷰 카메라에 최적화된 3D 공간 음향
+            _audioSource.spatialBlend = 0.85f;             // 3D 입체 음향 (좌우 패닝 및 거리감 유지)
             _audioSource.rolloffMode = AudioRolloffMode.Linear; // 선형 거리 감쇠
-            _audioSource.minDistance = 8.0f;               // 카메라/플레이어 앞을 지날 때 최대 100% 볼륨 도달
-            _audioSource.maxDistance = 50.0f;              // 멀리서부터 부르릉 다가오다가 코앞에서 극대화
-            _audioSource.dopplerLevel = 0.8f;              // 자연스러운 질주 도플러 효과
+            _audioSource.minDistance = 8.0f;               // 카메라/플레이어 앞을 지날 때 최대 음량
+            _audioSource.maxDistance = 45.0f;              // 적절한 거리 감쇠
+            _audioSource.dopplerLevel = 0.0f;              // [중요!] 도플러 왜곡 제거로 깨끗한 음색 유지
             _audioSource.playOnAwake = false;
         }
 
@@ -91,7 +116,7 @@ namespace CampusRun.Obstacles
             if (engineClip != null)
             {
                 _audioSource.clip = engineClip;
-                _audioSource.volume = 1.0f;
+                _audioSource.volume = 0.70f;
                 _audioSource.pitch = UnityEngine.Random.Range(0.95f, 1.05f);
                 _audioSource.loop = true; // 주행 내내 엔진음 지속
                 _audioSource.Play();
@@ -105,17 +130,36 @@ namespace CampusRun.Obstacles
             // X축 방향으로 등속 직선 이동 (월드 좌표 기준)
             transform.position += new Vector3(_direction * _speed * Time.deltaTime, 0f, 0f);
 
-            // 플레이어 코앞/도로 중심(X=0 부근)을 지날 때 35% 확률로 "빵빵!" 경적 울림
+            // 플레이어 바로 앞뒤 레인에 있고, 코앞 도로 중심(X=0 부근)을 지날 때 엄격한 쿨다운과 낮은 확률(10%)로 경적
             if (!_hasHonked && Mathf.Abs(transform.position.x) < 4.0f)
             {
                 _hasHonked = true;
-                if (UnityEngine.Random.value < 0.35f)
+
+                // 1. 전체 차량 경적 쿨다운 체크 (최소 4초 동안 다른 차는 절대 경적 금지)
+                if (Time.time >= s_nextGlobalHonkTime)
                 {
-                    var audioMgr = AudioManager.Instance;
-                    AudioClip klaxonClip = audioMgr != null ? audioMgr.CarKlaxonClip : null;
-                    if (klaxonClip != null && _audioSource != null && _audioSource.isActiveAndEnabled)
+                    // 2. 플레이어 Z축(레인) 근접 여부 체크 (플레이어와 멀리 떨어진 레인의 차는 경적 금지)
+                    Vector3 playerPos = GridPlayerController.Instance != null
+                        ? GridPlayerController.Instance.transform.position
+                        : (Camera.main != null ? Camera.main.transform.position : Vector3.zero);
+
+                    float zDiff = Mathf.Abs(transform.position.z - playerPos.z);
+                    if (zDiff <= _honkTriggerZDistance)
                     {
-                        _audioSource.PlayOneShot(klaxonClip, 1.0f);
+                        // 3. 10%의 낮은 확률 검사
+                        if (UnityEngine.Random.value < _honkChance)
+                        {
+                            s_nextGlobalHonkTime = Time.time + _honkGlobalCooldown;
+
+                            var audioMgr = AudioManager.Instance;
+                            AudioClip klaxonClip = audioMgr != null ? audioMgr.CarKlaxonClip : null;
+                            if (klaxonClip != null && _audioSource != null && _audioSource.isActiveAndEnabled)
+                            {
+                                float finalVol = _honkVolume;
+                                if (audioMgr != null) finalVol *= audioMgr.CarKlaxonVolume;
+                                _audioSource.PlayOneShot(klaxonClip, finalVol);
+                            }
+                        }
                     }
                 }
             }
