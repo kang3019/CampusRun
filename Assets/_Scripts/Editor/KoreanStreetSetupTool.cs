@@ -31,12 +31,16 @@ namespace CampusRun.EditorTools
         private const string MatScaffoldMetalPath = MaterialsDir + "/M_Scaffold_Metal.mat";
         private const string MatScaffoldDarkPath = MaterialsDir + "/M_Scaffold_Dark.mat";
         private const string MatSafetyYellowPath = MaterialsDir + "/M_Safety_Yellow.mat";
+        private const string MatWaterPath = MaterialsDir + "/M_Water.mat";
+        private const string MatGrassPath = MaterialsDir + "/M_Grass_Vibrant.mat";
+        private const string MatBoundaryToneDownPath = MaterialsDir + "/M_Boundary_ToneDown.mat";
 
-        private const string PrefsKey = "CampusRun_KoreanStreetSetup_Executed_v13";
+        private const string PrefsKey = "CampusRun_KoreanStreetSetup_Executed_v15";
 
         // 프리팹 경로
         private const string SafeLanePrefabPath = PrefabsEnvDir + "/PF_SafeLane.prefab";
         private const string RoadLanePrefabPath = PrefabsEnvDir + "/PF_RoadLane.prefab";
+        private const string MotorcycleLanePrefabPath = PrefabsEnvDir + "/PF_MotorcycleLane.prefab";
         private const string WaterLanePrefabPath = PrefabsEnvDir + "/PF_WaterLane.prefab";
         private const string BollardPrefabPath = PrefabsObsDir + "/PF_Bollard.prefab";
         private const string KickboardPrefabPath = PrefabsObsDir + "/PF_Kickboard.prefab";
@@ -91,10 +95,16 @@ namespace CampusRun.EditorTools
             }
         }
 
+        [MenuItem("CampusRun/트랙 좌우 톤다운 경계 세팅 (Clean Tone-Down)")]
+        public static void SetupTrackBoundariesAndWaterBuoys()
+        {
+            SetupKoreanStreetTheme();
+        }
+
         [MenuItem("CampusRun/한국 거리 테마 적용 (보도블록 공사현장 & 철제 안전발판)")]
         public static void SetupKoreanStreetTheme()
         {
-            Debug.Log("[KoreanStreetSetupTool] === 보도블록 공사현장 테마 적용 시작 ===");
+            Debug.Log("[KoreanStreetSetupTool] === 한국 도심 거리 및 트랙 경계 세팅 시작 ===");
 
             // 1. 머티리얼 로드
             Material matSidewalk = AssetDatabase.LoadAssetAtPath<Material>(MatSidewalkPath);
@@ -111,6 +121,9 @@ namespace CampusRun.EditorTools
             Material matScaffoldMetal = AssetDatabase.LoadAssetAtPath<Material>(MatScaffoldMetalPath);
             Material matScaffoldDark = AssetDatabase.LoadAssetAtPath<Material>(MatScaffoldDarkPath);
             Material matSafetyYellow = AssetDatabase.LoadAssetAtPath<Material>(MatSafetyYellowPath);
+            Material matWater = AssetDatabase.LoadAssetAtPath<Material>(MatWaterPath);
+            Material matGrass = AssetDatabase.LoadAssetAtPath<Material>(MatGrassPath);
+            Material matToneDown = AssetDatabase.LoadAssetAtPath<Material>(MatBoundaryToneDownPath);
 
             // 2. 가로등 프리팹
             GameObject streetLightPrefab = RebuildStreetLightPrefab(matLightPole, matLightGlow);
@@ -124,13 +137,18 @@ namespace CampusRun.EditorTools
             // 5. PF_RoadLane 재구성
             RebuildRoadLanePrefab(matCrosswalk, matRoadMarking);
 
-            // 6. 물웅덩이 & 널판지 컨셉 보존 (공사장 덮어쓰기 비활성화)
-            // RebuildConstructionLaneAndScaffold(matWetCement, matScaffoldMetal, matScaffoldDark, matSafetyYellow, matCurb);
+            // 6. 하천 레인 (PF_WaterLane) - 복잡한 3D 모델 제거 및 깔끔한 물 표면 + 톤다운 경계 재구성
+            RebuildWaterLaneClean(matWater, matToneDown);
+
+            // 7. 모든 레인 프리팹에 미니멀 톤다운 경계선(Clean Tone-Down) 적용
+            ApplyToneDownBoundaryToPrefab(SafeLanePrefabPath, matToneDown);
+            ApplyToneDownBoundaryToPrefab(RoadLanePrefabPath, matToneDown);
+            ApplyToneDownBoundaryToPrefab(MotorcycleLanePrefabPath, matToneDown);
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
 
-            Debug.Log("[KoreanStreetSetupTool] === 보도블록 공사현장 테마 적용 완료! ===");
+            Debug.Log("[KoreanStreetSetupTool] === 트랙 좌우 톤다운 경계선(미니멀 음영) 세팅 완료! ===");
         }
 
         #region Prefabs
@@ -349,6 +367,50 @@ namespace CampusRun.EditorTools
             cube.transform.localPosition = localPos;
             cube.transform.localScale = localScale;
             return cube;
+        }
+
+        private static GameObject CreateScaledCube(string name, Transform parent, Material mat, Vector3 worldPos, Vector3 worldSize, Vector3 parentScale, bool keepCollider = false)
+        {
+            GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            cube.name = name;
+            cube.transform.SetParent(parent, false);
+            if (!keepCollider) Object.DestroyImmediate(cube.GetComponent<Collider>());
+            MeshRenderer mr = cube.GetComponent<MeshRenderer>();
+            mr.sharedMaterial = mat;
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            cube.transform.localPosition = new Vector3(
+                worldPos.x / parentScale.x,
+                worldPos.y / parentScale.y,
+                worldPos.z / parentScale.z
+            );
+            cube.transform.localScale = new Vector3(
+                worldSize.x / parentScale.x,
+                worldSize.y / parentScale.y,
+                worldSize.z / parentScale.z
+            );
+            return cube;
+        }
+
+        private static GameObject CreateScaledCylinder(string name, Transform parent, Material mat, Vector3 worldPos, Vector3 worldSize, Vector3 parentScale, bool keepCollider = false)
+        {
+            GameObject cyl = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            cyl.name = name;
+            cyl.transform.SetParent(parent, false);
+            if (!keepCollider) Object.DestroyImmediate(cyl.GetComponent<Collider>());
+            MeshRenderer mr = cyl.GetComponent<MeshRenderer>();
+            mr.sharedMaterial = mat;
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            cyl.transform.localPosition = new Vector3(
+                worldPos.x / parentScale.x,
+                worldPos.y / parentScale.y,
+                worldPos.z / parentScale.z
+            );
+            cyl.transform.localScale = new Vector3(
+                worldSize.x / parentScale.x,
+                (worldSize.y * 0.5f) / parentScale.y,
+                worldSize.z / parentScale.z
+            );
+            return cyl;
         }
 
         private static void RebuildRoadLanePrefab(Material matCrosswalk, Material matRoadMarking)
@@ -652,6 +714,118 @@ namespace CampusRun.EditorTools
                 PrefabUtility.UnloadPrefabContents(plankRoot);
                 Debug.Log("[KoreanStreetSetupTool] PF_FloatingPlank ➡️ 정밀 은빛 철제 비계 발판(아시바 발판) 리디자인 완료!");
             }
+        }
+
+        private static void RebuildWaterLaneClean(Material matWater, Material matToneDown)
+        {
+            GameObject waterRoot = PrefabUtility.LoadPrefabContents(WaterLanePrefabPath);
+            if (waterRoot == null) return;
+
+            // 하천 전체 폭 60m 설정 (와이드 화면 완벽 지원)
+            waterRoot.transform.localScale = new Vector3(60f, 0.12f, 1f);
+
+            MeshRenderer mr = waterRoot.GetComponent<MeshRenderer>();
+            if (mr != null) mr.sharedMaterial = matWater;
+
+            // 물 트리거 콜라이더는 60m 전체 영역
+            BoxCollider waterCol = waterRoot.GetComponent<BoxCollider>();
+            if (waterCol != null)
+            {
+                waterCol.isTrigger = true;
+                waterCol.center = Vector3.zero;
+                waterCol.size = Vector3.one;
+            }
+
+            // 기존 복잡한 3D 프랍 자식 제거
+            RemoveOldBoundaryDecorations(waterRoot.transform);
+
+            // 톤다운 경계 오버레이 부착
+            ApplyToneDownBoundary(waterRoot, matToneDown);
+
+            // WaterLane 컴포넌트 설정
+            WaterLane waterLane = waterRoot.GetComponent<WaterLane>();
+            if (waterLane != null)
+            {
+                SerializedObject so = new SerializedObject(waterLane);
+                so.FindProperty("_laneWidth").floatValue = 60f;
+                so.FindProperty("_spawnBoundaryX").floatValue = 26f;
+                so.ApplyModifiedProperties();
+            }
+
+            PrefabUtility.SaveAsPrefabAsset(waterRoot, WaterLanePrefabPath);
+            PrefabUtility.UnloadPrefabContents(waterRoot);
+            Debug.Log("[KoreanStreetSetupTool] PF_WaterLane.prefab 클린 톤다운 경계 재구성 완료!");
+        }
+
+        private static void ApplyToneDownBoundaryToPrefab(string prefabPath, Material matToneDown)
+        {
+            GameObject laneRoot = PrefabUtility.LoadPrefabContents(prefabPath);
+            if (laneRoot == null) return;
+
+            RemoveOldBoundaryDecorations(laneRoot.transform);
+            ApplyToneDownBoundary(laneRoot, matToneDown);
+
+            PrefabUtility.SaveAsPrefabAsset(laneRoot, prefabPath);
+            PrefabUtility.UnloadPrefabContents(laneRoot);
+            Debug.Log($"[KoreanStreetSetupTool] {Path.GetFileName(prefabPath)} 톤다운 경계 적용 완료!");
+        }
+
+        private static void RemoveOldBoundaryDecorations(Transform root)
+        {
+            string[] targets = new string[]
+            {
+                "BoundaryDecorations",
+                "HazardBuoys",
+                "ConstructionCurbs",
+                "RoadGuardrails",
+                "SidewalkBorders",
+                "ToneDown_Boundaries"
+            };
+
+            foreach (string t in targets)
+            {
+                Transform child = root.Find(t);
+                if (child != null)
+                {
+                    Object.DestroyImmediate(child.gameObject);
+                }
+            }
+        }
+
+        private static void ApplyToneDownBoundary(GameObject laneRoot, Material matToneDown)
+        {
+            if (matToneDown == null) return;
+
+            Vector3 parentScale = laneRoot.transform.localScale;
+
+            GameObject container = new GameObject("ToneDown_Boundaries");
+            container.transform.SetParent(laneRoot.transform, false);
+
+            // 좌측 톤다운 오버레이: 월드 X = -17.4f (X = -4.8m ~ -30.0m 구간, 폭 25.2m)
+            CreateToneDownBlock("ToneDown_Left", container.transform, matToneDown,
+                new Vector3(-17.4f / parentScale.x, 0.505f, 0f),
+                new Vector3(25.2f / parentScale.x, 0.02f / parentScale.y, 1f));
+
+            // 우측 톤다운 오버레이: 월드 X = +17.4f (X = +4.8m ~ +30.0m 구간, 폭 25.2m)
+            CreateToneDownBlock("ToneDown_Right", container.transform, matToneDown,
+                new Vector3(17.4f / parentScale.x, 0.505f, 0f),
+                new Vector3(25.2f / parentScale.x, 0.02f / parentScale.y, 1f));
+        }
+
+        private static void CreateToneDownBlock(string name, Transform parent, Material mat, Vector3 localPos, Vector3 localScale)
+        {
+            GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            cube.name = name;
+            cube.transform.SetParent(parent, false);
+            Object.DestroyImmediate(cube.GetComponent<Collider>());
+
+            MeshRenderer mr = cube.GetComponent<MeshRenderer>();
+            mr.sharedMaterial = mat;
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            mr.receiveShadows = false;
+
+            cube.transform.localPosition = localPos;
+            cube.transform.localScale = localScale;
         }
 
         [MenuItem("CampusRun/초고속 질주 차량 모델 세팅 (스포츠카)")]

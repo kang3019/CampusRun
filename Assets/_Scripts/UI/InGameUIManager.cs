@@ -53,16 +53,80 @@ namespace CampusRun.UI
         [Tooltip("조작 키 가이드 텍스트")]
         [SerializeField] private Text _keyGuideText;
 
+        [Header("--- 홈 화면 설정 (Settings) ---")]
+        [Tooltip("홈 화면에 표시될 설정 열기 버튼")]
+        [SerializeField] private Button _settingsButton;
+
+        [Tooltip("설정 팝업 다이얼로그 패널")]
+        [SerializeField] private GameObject _settingsPanel;
+
+        [Header("--- 스플래시 인트로 화면 (Splash Screen) ---")]
+        [Tooltip("스플래시 화면 패널")]
+        [SerializeField] private GameObject _splashScreenPanel;
+
+        [Tooltip("스플래시 화면 활성화 여부 (게임 최초 기동 시 1회 재생)")]
+        [SerializeField] private bool _enableSplashScreen = true;
+
+        [Tooltip("스플래시 화면 진행 지속 시간(초)")]
+        [SerializeField] private float _splashDuration = 2.6f;
+
         [Header("--- 폰트 설정 ---")]
         [Tooltip("레트로 도트 폰트 (미지정 시 Resources/Fonts/neodgm 자동 로드)")]
         [SerializeField] private Font _pixelFont;
 
         private const string HighScoreKey = "CampusRun_HighScore";
+        private const string PrefKeyMasterVolume = "CampusRun_MasterVolume";
+        private const string PrefKeyBGMVolume = "CampusRun_BGMVolume";
+        private const string PrefKeySFXVolume = "CampusRun_SFXVolume";
+        private const string PrefKeyScreenShake = "CampusRun_ScreenShake";
+
+        private static bool _hasShownSplashThisSession = false; // 앱 실행 중 최초 1회만 재생 (다시하기 시 즉시 홈 화면)
+        private bool _isSplashActive = false;
         private int _currentScore = 0;
         private bool _isGameOver = false;
         private bool _isGameStarted = false;
+        private bool _isSettingsOpen = false;
         private Coroutine _warningBlinkRoutine;
         private Coroutine _promptPulseRoutine;
+        private Coroutine _splashSequenceRoutine;
+
+        // 스플래시 화면 UI 요소 캐싱
+        private RectTransform _splashProgressFillRect;
+        private Text _splashProgressPercentText;
+        private Text _splashStatusText;
+
+        // 힙 할당(GC Alloc) 방지를 위한 정적 캐싱 문자열
+        private static readonly string[] SplashStatusMessages = new string[]
+        {
+            "1교시 강의계획서 확인 중...",
+            "캠퍼스 셔틀버스 실시간 위치 추적 중...",
+            "학생 식당 학식 메뉴 및 잔여 출석 일수 조회 중...",
+            "교수님 출석부 및 과제 제출함 동기화 중...",
+            "출석체크 준비 완료! 지금 출발하세요! 🏃‍♂️💨"
+        };
+
+        private static readonly string[] CachedPercentStrings = GeneratePercentStrings();
+        private static string[] GeneratePercentStrings()
+        {
+            string[] arr = new string[101];
+            for (int i = 0; i <= 100; i++) arr[i] = $"{i}%";
+            return arr;
+        }
+
+        // 설정 패널 UI 동적 캐싱 변수
+        private Slider _masterVolumeSlider;
+        private Text _masterVolumeValueText;
+        private Slider _bgmVolumeSlider;
+        private Text _bgmVolumeValueText;
+        private Slider _sfxVolumeSlider;
+        private Text _sfxVolumeValueText;
+        private Button _screenShakeToggleButton;
+        private Text _screenShakeToggleText;
+        private Image _screenShakeToggleBg;
+        private Button _displayModeToggleButton;
+        private Text _displayModeToggleText;
+        private Text _resetFeedbackText;
+        private Coroutine _resetFeedbackRoutine;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void AutoInitializeInScene()
@@ -106,23 +170,52 @@ namespace CampusRun.UI
                 _warningBannerText.gameObject.SetActive(false);
             }
 
+            if (_settingsPanel != null)
+            {
+                _settingsPanel.SetActive(false);
+            }
+
             if (_retryButton != null)
             {
                 _retryButton.onClick.RemoveAllListeners();
                 _retryButton.onClick.AddListener(OnRetryButtonClicked);
             }
 
-            // 시작 화면 활성화 및 점수 HUD 대기 상태 초기화
+            if (_settingsButton != null)
+            {
+                _settingsButton.onClick.RemoveAllListeners();
+                _settingsButton.onClick.AddListener(OpenSettings);
+                _settingsButton.gameObject.SetActive(true);
+            }
+
+            LoadAndApplySettings();
+
+            // 시작 화면 활성화 (스플래시 화면 우선 실행 또는 타이틀 즉시 대기)
             _isGameStarted = false;
-            if (_titleScreenPanel != null)
+            if (_enableSplashScreen && !_hasShownSplashThisSession)
             {
-                _titleScreenPanel.SetActive(true);
+                _isSplashActive = true;
+                _hasShownSplashThisSession = true;
+
+                if (_titleScreenPanel != null) _titleScreenPanel.SetActive(false);
+                if (_settingsButton != null) _settingsButton.gameObject.SetActive(false);
+                if (_scoreText != null) _scoreText.gameObject.SetActive(false);
+
+                if (_splashScreenPanel != null)
+                {
+                    _splashScreenPanel.SetActive(true);
+                    _splashSequenceRoutine = StartCoroutine(SplashScreenSequenceRoutine());
+                }
             }
-            if (_scoreText != null)
+            else
             {
-                _scoreText.gameObject.SetActive(false);
+                _isSplashActive = false;
+                if (_splashScreenPanel != null) _splashScreenPanel.SetActive(false);
+                if (_titleScreenPanel != null) _titleScreenPanel.SetActive(true);
+                if (_settingsButton != null) _settingsButton.gameObject.SetActive(true);
+                if (_scoreText != null) _scoreText.gameObject.SetActive(false);
+                StartPromptPulse();
             }
-            StartPromptPulse();
         }
 
         private void OnEnable()
@@ -133,6 +226,7 @@ namespace CampusRun.UI
             GameEvents.OnPlayerDied += ShowGameOverPanel;
             GameEvents.OnInactivityWarning += HandleInactivityWarning;
             GameEvents.OnInactivityTimerUpdated += HandleInactivityTimerUpdated;
+            GameEvents.OnBoundaryWarning += HandleBoundaryWarning;
         }
 
         private void OnDisable()
@@ -143,6 +237,7 @@ namespace CampusRun.UI
             GameEvents.OnPlayerDied -= ShowGameOverPanel;
             GameEvents.OnInactivityWarning -= HandleInactivityWarning;
             GameEvents.OnInactivityTimerUpdated -= HandleInactivityTimerUpdated;
+            GameEvents.OnBoundaryWarning -= HandleBoundaryWarning;
         }
 
         private void Start()
@@ -152,37 +247,47 @@ namespace CampusRun.UI
 
         private void Update()
         {
-            // 게임 시작 전: 마우스 좌클릭, 스페이스바, 엔터키로도 즉시 첫 도약하며 게임 시작 가능
+            var keyboard = UnityEngine.InputSystem.Keyboard.current;
+            var mouse = UnityEngine.InputSystem.Mouse.current;
+            var touch = UnityEngine.InputSystem.Touchscreen.current;
+
+            // 0. 스플래시 화면 진행 중 스킵 입력 감지 (Space, Enter, Esc, 마우스 클릭, 화면 터치)
+            if (_isSplashActive)
+            {
+                bool skipPressed = (keyboard != null && (keyboard.spaceKey.wasPressedThisFrame || keyboard.enterKey.wasPressedThisFrame || keyboard.escapeKey.wasPressedThisFrame))
+                                || (mouse != null && mouse.leftButton.wasPressedThisFrame)
+                                || (touch != null && touch.primaryTouch.press.wasPressedThisFrame);
+
+                if (skipPressed)
+                {
+                    SkipSplashScreen();
+                }
+                return;
+            }
+
+            if (keyboard == null) return;
+
+            // 1. 설정 창이 열려 있을 때 ESC 키로 닫기
+            if (_isSettingsOpen)
+            {
+                if (keyboard.escapeKey.wasPressedThisFrame)
+                {
+                    CloseSettings();
+                }
+                return;
+            }
+
+            // 2. 홈 화면(게임 시작 전)에서 ESC 또는 O키를 누르면 설정 열기
             if (!_isGameStarted && !_isGameOver)
             {
-                var keyboard = UnityEngine.InputSystem.Keyboard.current;
-                var mouse = UnityEngine.InputSystem.Mouse.current;
-
-                bool shouldStart = false;
-                if (keyboard != null && (keyboard.spaceKey.wasPressedThisFrame || keyboard.enterKey.wasPressedThisFrame))
+                if (keyboard.escapeKey.wasPressedThisFrame || keyboard.oKey.wasPressedThisFrame)
                 {
-                    shouldStart = true;
-                }
-                else if (mouse != null && mouse.leftButton.wasPressedThisFrame)
-                {
-                    shouldStart = true;
-                }
-
-                if (shouldStart)
-                {
-                    var player = FindAnyObjectByType<CampusRun.Player.GridPlayerController>();
-                    if (player != null && player.IsAlive)
-                    {
-                        player.TryHop(Vector3Int.forward);
-                    }
-                    else
-                    {
-                        HandleGameStarted();
-                    }
+                    OpenSettings();
+                    return;
                 }
             }
 
-            // 게임오버 시 키보드 R키, 스페이스바, 엔터키로도 즉시 다시하기 가능
+            // 3. 게임오버 시 키보드 R키, 스페이스바, 엔터키로 즉시 다시하기
             if (_isGameOver)
             {
                 // 이름 입력 팝업이나 랭킹 모달이 열려 있는 동안은 단축키 오작동 방지
@@ -191,8 +296,7 @@ namespace CampusRun.UI
                     return;
                 }
 
-                var keyboard = UnityEngine.InputSystem.Keyboard.current;
-                if (keyboard != null && (keyboard.rKey.wasPressedThisFrame || keyboard.spaceKey.wasPressedThisFrame || keyboard.enterKey.wasPressedThisFrame))
+                if (keyboard.rKey.wasPressedThisFrame || keyboard.spaceKey.wasPressedThisFrame || keyboard.enterKey.wasPressedThisFrame)
                 {
                     OnRetryButtonClicked();
                 }
@@ -527,6 +631,12 @@ namespace CampusRun.UI
 
             // 5. 게임 시작 화면 (지각 5분전 타이틀 및 방향키 조작 안내)
             EnsureTitleScreenUI(canvas, defaultFont);
+
+            // 6. 홈 화면 설정 버튼 및 설정 팝업 패널
+            EnsureSettingsUI(canvas, defaultFont);
+
+            // 7. 스플래시 인트로 화면
+            EnsureSplashScreenUI(canvas, defaultFont);
         }
 
         /// <summary>
@@ -726,6 +836,16 @@ namespace CampusRun.UI
         {
             _isGameStarted = true;
 
+            if (_isSettingsOpen)
+            {
+                CloseSettings();
+            }
+
+            if (_settingsButton != null)
+            {
+                _settingsButton.gameObject.SetActive(false);
+            }
+
             if (_promptPulseRoutine != null)
             {
                 StopCoroutine(_promptPulseRoutine);
@@ -777,6 +897,16 @@ namespace CampusRun.UI
             _isGameStarted = false;
             _isGameOver = false;
 
+            if (_isSettingsOpen)
+            {
+                CloseSettings();
+            }
+
+            if (_settingsButton != null)
+            {
+                _settingsButton.gameObject.SetActive(true);
+            }
+
             if (_gameOverPanel != null) _gameOverPanel.SetActive(false);
             if (_warningBannerText != null) _warningBannerText.gameObject.SetActive(false);
             if (_scoreText != null)
@@ -814,7 +944,7 @@ namespace CampusRun.UI
         }
 
         /// <summary>
-        /// 점수 HUD, 게임오버 대화상자 박스, 다시하기 버튼의 스케일을 1배(Vector3.one)로 정밀하게 고정합니다.
+        /// 점수 HUD, 게임오버 대화상자 박스, 다시하기 버튼 및 설정 버튼/창의 스케일을 1배(Vector3.one)로 정밀하게 고정합니다.
         /// </summary>
         public void ApplyFixedScale()
         {
@@ -842,6 +972,20 @@ namespace CampusRun.UI
             if (_retryButton != null)
             {
                 _retryButton.transform.localScale = fixedScale;
+            }
+
+            if (_settingsButton != null)
+            {
+                _settingsButton.transform.localScale = fixedScale;
+            }
+
+            if (_settingsPanel != null)
+            {
+                Transform box = _settingsPanel.transform.Find("Dialog_Box");
+                if (box != null)
+                {
+                    box.localScale = fixedScale;
+                }
             }
         }
 
@@ -913,6 +1057,40 @@ namespace CampusRun.UI
             }
         }
 
+        /// <summary> 하천/트랙 경계선(아웃 위험 구역) 근접 경고 처리 </summary>
+        private void HandleBoundaryWarning(bool isWarning, float dangerProgress, bool isRight)
+        {
+            if (_warningBannerText == null) return;
+
+            if (isWarning)
+            {
+                if (!_warningBannerText.gameObject.activeSelf)
+                {
+                    _warningBannerText.gameObject.SetActive(true);
+                }
+
+                string dirText = isRight ? "우측" : "좌측";
+                if (dangerProgress >= 0.75f)
+                {
+                    _warningBannerText.text = $"🚨 {dirText} 배수구 흡입 위험! 부표 이탈 주의!";
+                    _warningBannerText.color = new Color(1f, 0.2f, 0.2f);
+                }
+                else
+                {
+                    _warningBannerText.text = $"⚠️ 급류 경고! {dirText} 위험 부표로 밀려나는 중!";
+                    _warningBannerText.color = new Color(1f, 0.6f, 0.15f);
+                }
+            }
+            else
+            {
+                // 부표/배수구 관련 경고 텍스트일 때만 비활성화
+                if (_warningBannerText.text.Contains("부표") || _warningBannerText.text.Contains("배수구"))
+                {
+                    _warningBannerText.gameObject.SetActive(false);
+                }
+            }
+        }
+
         /// <summary> 플레이어 사망 시 게임오버 패널 활성화 및 성적표 발급 </summary>
         private void ShowGameOverPanel(string deathReason, int finalScore)
         {
@@ -920,6 +1098,7 @@ namespace CampusRun.UI
 
             // 경고 배너 끄기
             HandleInactivityWarning(false);
+            HandleBoundaryWarning(false, 0f, false);
 
             EnsureEventSystem();
             EnsureHUDAndGameOverUI();
@@ -1047,5 +1226,829 @@ namespace CampusRun.UI
             GameEvents.ClearAllSubscriptions();
             SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
         }
+
+        #region Settings Management (홈 화면 설정 버튼 & 설정 팝업)
+
+        /// <summary>
+        /// 홈 화면 우측 상단 '⚙️ 설정' 버튼 및 설정 팝업 다이얼로그 패널을 자동 생성합니다.
+        /// </summary>
+        private void EnsureSettingsUI(Canvas canvas, Font defaultFont)
+        {
+            if (_settingsButton == null)
+            {
+                // 1. 홈 화면 설정 버튼 (화면 우측 상단)
+                GameObject btnObj = new GameObject("Home_Settings_Button");
+                btnObj.transform.SetParent(canvas.transform, false);
+
+                RectTransform rect = btnObj.AddComponent<RectTransform>();
+                rect.anchorMin = new Vector2(1f, 1f); // 우상단
+                rect.anchorMax = new Vector2(1f, 1f);
+                rect.pivot = new Vector2(1f, 1f);
+                rect.anchoredPosition = new Vector2(-60f, -50f);
+                rect.sizeDelta = new Vector2(140f, 54f);
+                btnObj.transform.localScale = new Vector3(0.9f, 0.9f, 0.9f);
+
+                Image btnImg = btnObj.AddComponent<Image>();
+                btnImg.color = new Color(0.12f, 0.15f, 0.22f, 0.92f);
+
+                _settingsButton = btnObj.AddComponent<Button>();
+                ColorBlock colors = _settingsButton.colors;
+                colors.highlightedColor = new Color(0.22f, 0.28f, 0.40f, 1f);
+                colors.pressedColor = new Color(0.10f, 0.12f, 0.18f, 1f);
+                _settingsButton.colors = colors;
+
+                Shadow shadow = btnObj.AddComponent<Shadow>();
+                shadow.effectColor = new Color(0f, 0f, 0f, 0.6f);
+                shadow.effectDistance = new Vector2(2f, -2f);
+
+                GameObject textObj = new GameObject("Text");
+                textObj.transform.SetParent(btnObj.transform, false);
+                RectTransform textRect = textObj.AddComponent<RectTransform>();
+                textRect.sizeDelta = rect.sizeDelta;
+
+                Text btnText = textObj.AddComponent<Text>();
+                btnText.font = defaultFont;
+                btnText.fontSize = 24;
+                btnText.fontStyle = FontStyle.Bold;
+                btnText.color = Color.white;
+                btnText.alignment = TextAnchor.MiddleCenter;
+                btnText.text = "⚙️ 설정";
+
+                _settingsButton.onClick.RemoveAllListeners();
+                _settingsButton.onClick.AddListener(OpenSettings);
+            }
+
+            if (_settingsPanel == null)
+            {
+                // 2. 설정 팝업 다이얼로그 패널
+                _settingsPanel = new GameObject("Settings_Panel");
+                _settingsPanel.transform.SetParent(canvas.transform, false);
+
+                RectTransform panelRect = _settingsPanel.AddComponent<RectTransform>();
+                panelRect.anchorMin = Vector2.zero;
+                panelRect.anchorMax = Vector2.one;
+                panelRect.sizeDelta = Vector2.zero;
+
+                Image dimImg = _settingsPanel.AddComponent<Image>();
+                dimImg.color = new Color(0f, 0f, 0f, 0.78f);
+
+                // 중앙 다이얼로그 박스
+                GameObject boxObj = new GameObject("Dialog_Box");
+                boxObj.transform.SetParent(_settingsPanel.transform, false);
+
+                RectTransform boxRect = boxObj.AddComponent<RectTransform>();
+                boxRect.anchorMin = new Vector2(0.5f, 0.5f);
+                boxRect.anchorMax = new Vector2(0.5f, 0.5f);
+                boxRect.pivot = new Vector2(0.5f, 0.5f);
+                boxRect.sizeDelta = new Vector2(580f, 620f);
+                boxObj.transform.localScale = new Vector3(0.9f, 0.9f, 0.9f);
+
+                Image boxImg = boxObj.AddComponent<Image>();
+                boxImg.color = new Color(0.11f, 0.13f, 0.17f, 0.98f);
+
+                // 상단 타이틀: ⚙️ 게임 설정
+                GameObject titleObj = new GameObject("Title_Text");
+                titleObj.transform.SetParent(boxObj.transform, false);
+                RectTransform titleRect = titleObj.AddComponent<RectTransform>();
+                titleRect.anchoredPosition = new Vector2(0f, 255f);
+                titleRect.sizeDelta = new Vector2(400f, 50f);
+
+                Text titleText = titleObj.AddComponent<Text>();
+                titleText.font = defaultFont;
+                titleText.fontSize = 36;
+                titleText.fontStyle = FontStyle.Bold;
+                titleText.color = new Color(1f, 0.88f, 0.2f);
+                titleText.alignment = TextAnchor.MiddleCenter;
+                titleText.text = "⚙️ 게임 설정";
+
+                // 상단 우측 [X] 닫기 버튼
+                GameObject closeBtnObj = new GameObject("Close_X_Button");
+                closeBtnObj.transform.SetParent(boxObj.transform, false);
+                RectTransform closeRect = closeBtnObj.AddComponent<RectTransform>();
+                closeRect.anchoredPosition = new Vector2(245f, 255f);
+                closeRect.sizeDelta = new Vector2(42f, 42f);
+
+                Image closeImg = closeBtnObj.AddComponent<Image>();
+                closeImg.color = new Color(0.75f, 0.22f, 0.22f, 0.9f);
+                Button closeBtn = closeBtnObj.AddComponent<Button>();
+                closeBtn.onClick.AddListener(CloseSettings);
+
+                GameObject closeTextObj = new GameObject("Text");
+                closeTextObj.transform.SetParent(closeBtnObj.transform, false);
+                RectTransform closeTextRect = closeTextObj.AddComponent<RectTransform>();
+                closeTextRect.sizeDelta = closeRect.sizeDelta;
+                Text closeText = closeTextObj.AddComponent<Text>();
+                closeText.font = defaultFont;
+                closeText.fontSize = 22;
+                closeText.fontStyle = FontStyle.Bold;
+                closeText.color = Color.white;
+                closeText.alignment = TextAnchor.MiddleCenter;
+                closeText.text = "X";
+
+                // 1) 전체 음량 슬라이더 (Y = 175)
+                CreateSliderRow("전체 음량", boxObj.transform, 175f, defaultFont,
+                    PlayerPrefs.GetFloat(PrefKeyMasterVolume, 1.0f),
+                    OnMasterVolumeChanged,
+                    out _masterVolumeSlider, out _masterVolumeValueText);
+
+                // 2) 배경 음악 슬라이더 (Y = 105)
+                CreateSliderRow("배경 음악", boxObj.transform, 105f, defaultFont,
+                    PlayerPrefs.GetFloat(PrefKeyBGMVolume, 0.8f),
+                    OnBGMVolumeChanged,
+                    out _bgmVolumeSlider, out _bgmVolumeValueText);
+
+                // 3) 효과음 슬라이더 (Y = 35)
+                CreateSliderRow("효과음", boxObj.transform, 35f, defaultFont,
+                    PlayerPrefs.GetFloat(PrefKeySFXVolume, 1.0f),
+                    OnSFXVolumeChanged,
+                    out _sfxVolumeSlider, out _sfxVolumeValueText);
+
+                // 4) 화면 흔들림 토글 (Y = -35)
+                bool isShakeOn = PlayerPrefs.GetInt(PrefKeyScreenShake, 1) == 1;
+                CreateToggleRow("화면 흔들림", boxObj.transform, -35f, defaultFont,
+                    isShakeOn ? "ON (켬)" : "OFF (끔)",
+                    isShakeOn ? new Color(0.18f, 0.78f, 0.38f) : new Color(0.4f, 0.45f, 0.5f),
+                    OnScreenShakeToggled,
+                    out _screenShakeToggleButton, out _screenShakeToggleText, out _screenShakeToggleBg);
+
+                // 5) 화면 모드 토글 (Y = -105)
+                bool isFullscreen = Screen.fullScreen;
+                CreateToggleRow("화면 모드", boxObj.transform, -105f, defaultFont,
+                    isFullscreen ? "[ 전체화면 ]" : "[ 창모드 ]",
+                    new Color(0.24f, 0.55f, 0.9f),
+                    OnDisplayModeToggled,
+                    out _displayModeToggleButton, out _displayModeToggleText, out _);
+
+                // 6) 최고 기록 초기화 (Y = -175)
+                GameObject resetRowObj = new GameObject("Reset_Row");
+                resetRowObj.transform.SetParent(boxObj.transform, false);
+
+                GameObject resetLabelObj = new GameObject("Label");
+                resetLabelObj.transform.SetParent(resetRowObj.transform, false);
+                RectTransform resetLabelRect = resetLabelObj.AddComponent<RectTransform>();
+                resetLabelRect.anchoredPosition = new Vector2(-150f, -175f);
+                resetLabelRect.sizeDelta = new Vector2(160f, 40f);
+                Text resetLabelText = resetLabelObj.AddComponent<Text>();
+                resetLabelText.font = defaultFont;
+                resetLabelText.fontSize = 22;
+                resetLabelText.color = Color.white;
+                resetLabelText.alignment = TextAnchor.MiddleLeft;
+                resetLabelText.text = "최고 기록";
+
+                GameObject resetBtnObj = new GameObject("Reset_Button");
+                resetBtnObj.transform.SetParent(resetRowObj.transform, false);
+                RectTransform resetBtnRect = resetBtnObj.AddComponent<RectTransform>();
+                resetBtnRect.anchoredPosition = new Vector2(95f, -175f);
+                resetBtnRect.sizeDelta = new Vector2(180f, 42f);
+                Image resetBtnImg = resetBtnObj.AddComponent<Image>();
+                resetBtnImg.color = new Color(0.85f, 0.45f, 0.15f);
+                Button resetBtn = resetBtnObj.AddComponent<Button>();
+                resetBtn.onClick.AddListener(OnResetHighScoreClicked);
+
+                GameObject resetBtnTextObj = new GameObject("Text");
+                resetBtnTextObj.transform.SetParent(resetBtnObj.transform, false);
+                RectTransform resetBtnTextRect = resetBtnTextObj.AddComponent<RectTransform>();
+                resetBtnTextRect.sizeDelta = resetBtnRect.sizeDelta;
+                Text resetBtnText = resetBtnTextObj.AddComponent<Text>();
+                resetBtnText.font = defaultFont;
+                resetBtnText.fontSize = 20;
+                resetBtnText.fontStyle = FontStyle.Bold;
+                resetBtnText.color = Color.white;
+                resetBtnText.alignment = TextAnchor.MiddleCenter;
+                resetBtnText.text = "기록 초기화";
+
+                // 초기화 완료 피드백 텍스트 (Y = -215)
+                GameObject feedbackObj = new GameObject("Reset_Feedback_Text");
+                feedbackObj.transform.SetParent(boxObj.transform, false);
+                RectTransform fbRect = feedbackObj.AddComponent<RectTransform>();
+                fbRect.anchoredPosition = new Vector2(0f, -215f);
+                fbRect.sizeDelta = new Vector2(400f, 30f);
+                _resetFeedbackText = feedbackObj.AddComponent<Text>();
+                _resetFeedbackText.font = defaultFont;
+                _resetFeedbackText.fontSize = 18;
+                _resetFeedbackText.color = new Color(0.3f, 0.95f, 0.5f);
+                _resetFeedbackText.alignment = TextAnchor.MiddleCenter;
+                _resetFeedbackText.text = "최고 기록이 0m로 초기화되었습니다!";
+                _resetFeedbackText.gameObject.SetActive(false);
+
+                // 7) 하단 확인/닫기 버튼 (Y = -260)
+                GameObject bottomCloseObj = new GameObject("Bottom_Close_Button");
+                bottomCloseObj.transform.SetParent(boxObj.transform, false);
+                RectTransform bcRect = bottomCloseObj.AddComponent<RectTransform>();
+                bcRect.anchoredPosition = new Vector2(0f, -260f);
+                bcRect.sizeDelta = new Vector2(260f, 52f);
+
+                Image bcImg = bottomCloseObj.AddComponent<Image>();
+                bcImg.color = new Color(0.18f, 0.78f, 0.38f);
+                Button bcBtn = bottomCloseObj.AddComponent<Button>();
+                bcBtn.onClick.AddListener(CloseSettings);
+
+                GameObject bcTextObj = new GameObject("Text");
+                bcTextObj.transform.SetParent(bottomCloseObj.transform, false);
+                RectTransform bcTextRect = bcTextObj.AddComponent<RectTransform>();
+                bcTextRect.sizeDelta = bcRect.sizeDelta;
+                Text bcText = bcTextObj.AddComponent<Text>();
+                bcText.font = defaultFont;
+                bcText.fontSize = 24;
+                bcText.fontStyle = FontStyle.Bold;
+                bcText.color = Color.white;
+                bcText.alignment = TextAnchor.MiddleCenter;
+                bcText.text = "닫기 (ESC)";
+
+                _settingsPanel.SetActive(false);
+            }
+        }
+
+        private void CreateSliderRow(string label, Transform parent, float yPos, Font font, float initialVal,
+            Action<float> onValueChanged, out Slider outSlider, out Text outValText)
+        {
+            GameObject rowObj = new GameObject($"Row_{label}");
+            rowObj.transform.SetParent(parent, false);
+
+            // 라벨 텍스트
+            GameObject labelObj = new GameObject("Label");
+            labelObj.transform.SetParent(rowObj.transform, false);
+            RectTransform labelRect = labelObj.AddComponent<RectTransform>();
+            labelRect.anchoredPosition = new Vector2(-150f, yPos);
+            labelRect.sizeDelta = new Vector2(160f, 40f);
+            Text labelText = labelObj.AddComponent<Text>();
+            labelText.font = font;
+            labelText.fontSize = 22;
+            labelText.color = Color.white;
+            labelText.alignment = TextAnchor.MiddleLeft;
+            labelText.text = label;
+
+            // 슬라이더 루트
+            GameObject sliderObj = new GameObject("Slider");
+            sliderObj.transform.SetParent(rowObj.transform, false);
+            RectTransform sliderRect = sliderObj.AddComponent<RectTransform>();
+            sliderRect.anchoredPosition = new Vector2(35f, yPos);
+            sliderRect.sizeDelta = new Vector2(180f, 24f);
+
+            Slider slider = sliderObj.AddComponent<Slider>();
+            slider.minValue = 0f;
+            slider.maxValue = 1f;
+            slider.value = initialVal;
+
+            // 슬라이더 배경
+            GameObject bgObj = new GameObject("Background");
+            bgObj.transform.SetParent(sliderObj.transform, false);
+            RectTransform bgRect = bgObj.AddComponent<RectTransform>();
+            bgRect.anchorMin = new Vector2(0f, 0.25f);
+            bgRect.anchorMax = new Vector2(1f, 0.75f);
+            bgRect.sizeDelta = Vector2.zero;
+            Image bgImg = bgObj.AddComponent<Image>();
+            bgImg.color = new Color(0.2f, 0.22f, 0.28f, 1f);
+
+            // Fill Area & Fill
+            GameObject fillArea = new GameObject("Fill Area");
+            fillArea.transform.SetParent(sliderObj.transform, false);
+            RectTransform fillAreaRect = fillArea.AddComponent<RectTransform>();
+            fillAreaRect.anchorMin = new Vector2(0f, 0.25f);
+            fillAreaRect.anchorMax = new Vector2(1f, 0.75f);
+            fillAreaRect.sizeDelta = new Vector2(-16f, 0f);
+
+            GameObject fillObj = new GameObject("Fill");
+            fillObj.transform.SetParent(fillArea.transform, false);
+            RectTransform fillRect = fillObj.AddComponent<RectTransform>();
+            fillRect.sizeDelta = Vector2.zero;
+            Image fillImg = fillObj.AddComponent<Image>();
+            fillImg.color = new Color(0.18f, 0.78f, 0.38f);
+            slider.fillRect = fillRect;
+
+            // Handle Slide Area & Handle
+            GameObject handleArea = new GameObject("Handle Slide Area");
+            handleArea.transform.SetParent(sliderObj.transform, false);
+            RectTransform handleAreaRect = handleArea.AddComponent<RectTransform>();
+            handleAreaRect.anchorMin = Vector2.zero;
+            handleAreaRect.anchorMax = Vector2.one;
+            handleAreaRect.sizeDelta = new Vector2(-16f, 0f);
+
+            GameObject handleObj = new GameObject("Handle");
+            handleObj.transform.SetParent(handleArea.transform, false);
+            RectTransform handleRect = handleObj.AddComponent<RectTransform>();
+            handleRect.sizeDelta = new Vector2(20f, 0f);
+            Image handleImg = handleObj.AddComponent<Image>();
+            handleImg.color = Color.white;
+            slider.handleRect = handleRect;
+            slider.targetGraphic = handleImg;
+
+            // 퍼센트 수치 텍스트
+            GameObject valObj = new GameObject("Value_Text");
+            valObj.transform.SetParent(rowObj.transform, false);
+            RectTransform valRect = valObj.AddComponent<RectTransform>();
+            valRect.anchoredPosition = new Vector2(185f, yPos);
+            valRect.sizeDelta = new Vector2(70f, 40f);
+            Text valText = valObj.AddComponent<Text>();
+            valText.font = font;
+            valText.fontSize = 20;
+            valText.color = new Color(0.9f, 0.9f, 0.9f);
+            valText.alignment = TextAnchor.MiddleCenter;
+            valText.text = $"{Mathf.RoundToInt(initialVal * 100f)}%";
+
+            outSlider = slider;
+            outValText = valText;
+
+            slider.onValueChanged.AddListener((v) =>
+            {
+                valText.text = $"{Mathf.RoundToInt(v * 100f)}%";
+                onValueChanged?.Invoke(v);
+            });
+        }
+
+        private void CreateToggleRow(string label, Transform parent, float yPos, Font font,
+            string initialText, Color initialColor, Action onClick,
+            out Button outBtn, out Text outBtnText, out Image outBgImg)
+        {
+            GameObject rowObj = new GameObject($"Row_{label}");
+            rowObj.transform.SetParent(parent, false);
+
+            GameObject labelObj = new GameObject("Label");
+            labelObj.transform.SetParent(rowObj.transform, false);
+            RectTransform labelRect = labelObj.AddComponent<RectTransform>();
+            labelRect.anchoredPosition = new Vector2(-150f, yPos);
+            labelRect.sizeDelta = new Vector2(160f, 40f);
+            Text labelText = labelObj.AddComponent<Text>();
+            labelText.font = font;
+            labelText.fontSize = 22;
+            labelText.color = Color.white;
+            labelText.alignment = TextAnchor.MiddleLeft;
+            labelText.text = label;
+
+            GameObject btnObj = new GameObject("Toggle_Button");
+            btnObj.transform.SetParent(rowObj.transform, false);
+            RectTransform btnRect = btnObj.AddComponent<RectTransform>();
+            btnRect.anchoredPosition = new Vector2(95f, yPos);
+            btnRect.sizeDelta = new Vector2(180f, 42f);
+
+            Image bgImg = btnObj.AddComponent<Image>();
+            bgImg.color = initialColor;
+            outBgImg = bgImg;
+
+            Button btn = btnObj.AddComponent<Button>();
+            btn.onClick.AddListener(() => onClick?.Invoke());
+            outBtn = btn;
+
+            GameObject textObj = new GameObject("Text");
+            textObj.transform.SetParent(btnObj.transform, false);
+            RectTransform textRect = textObj.AddComponent<RectTransform>();
+            textRect.sizeDelta = btnRect.sizeDelta;
+            Text btnText = textObj.AddComponent<Text>();
+            btnText.font = font;
+            btnText.fontSize = 20;
+            btnText.fontStyle = FontStyle.Bold;
+            btnText.color = Color.white;
+            btnText.alignment = TextAnchor.MiddleCenter;
+            btnText.text = initialText;
+            outBtnText = btnText;
+        }
+
+        /// <summary>
+        /// 설정 창을 화면에 열고 조작을 일시정지합니다.
+        /// </summary>
+        public void OpenSettings()
+        {
+            if (_settingsPanel == null) return;
+
+            _isSettingsOpen = true;
+            _settingsPanel.SetActive(true);
+
+            // 게임 대기 상태에서 플레이어가 움직이지 않도록 조작 차단
+            GameEvents.TriggerGameStateChanged(GameState.Paused);
+            Time.timeScale = 0f;
+        }
+
+        /// <summary>
+        /// 설정 창을 닫고 설정을 저장하며 조작을 복구합니다.
+        /// </summary>
+        public void CloseSettings()
+        {
+            if (_settingsPanel == null) return;
+
+            _isSettingsOpen = false;
+            _settingsPanel.SetActive(false);
+
+            PlayerPrefs.Save();
+            Time.timeScale = 1f;
+
+            if (!_isGameStarted)
+            {
+                GameEvents.TriggerGameStateChanged(GameState.Ready);
+            }
+            else
+            {
+                GameEvents.TriggerGameStateChanged(GameState.Playing);
+            }
+        }
+
+        private void LoadAndApplySettings()
+        {
+            float masterVol = PlayerPrefs.GetFloat(PrefKeyMasterVolume, 1.0f);
+            AudioListener.volume = masterVol;
+
+            if (_masterVolumeSlider != null) _masterVolumeSlider.value = masterVol;
+            if (_masterVolumeValueText != null) _masterVolumeValueText.text = $"{Mathf.RoundToInt(masterVol * 100f)}%";
+
+            float bgmVol = PlayerPrefs.GetFloat(PrefKeyBGMVolume, 0.8f);
+            if (_bgmVolumeSlider != null) _bgmVolumeSlider.value = bgmVol;
+            if (_bgmVolumeValueText != null) _bgmVolumeValueText.text = $"{Mathf.RoundToInt(bgmVol * 100f)}%";
+
+            float sfxVol = PlayerPrefs.GetFloat(PrefKeySFXVolume, 1.0f);
+            if (_sfxVolumeSlider != null) _sfxVolumeSlider.value = sfxVol;
+            if (_sfxVolumeValueText != null) _sfxVolumeValueText.text = $"{Mathf.RoundToInt(sfxVol * 100f)}%";
+        }
+
+        private void OnMasterVolumeChanged(float val)
+        {
+            AudioListener.volume = val;
+            PlayerPrefs.SetFloat(PrefKeyMasterVolume, val);
+        }
+
+        private void OnBGMVolumeChanged(float val)
+        {
+            PlayerPrefs.SetFloat(PrefKeyBGMVolume, val);
+        }
+
+        private void OnSFXVolumeChanged(float val)
+        {
+            PlayerPrefs.SetFloat(PrefKeySFXVolume, val);
+        }
+
+        private void OnScreenShakeToggled()
+        {
+            int current = PlayerPrefs.GetInt(PrefKeyScreenShake, 1);
+            int next = (current == 1) ? 0 : 1;
+            PlayerPrefs.SetInt(PrefKeyScreenShake, next);
+
+            if (_screenShakeToggleText != null)
+            {
+                _screenShakeToggleText.text = (next == 1) ? "ON (켬)" : "OFF (끔)";
+            }
+            if (_screenShakeToggleBg != null)
+            {
+                _screenShakeToggleBg.color = (next == 1) ? new Color(0.18f, 0.78f, 0.38f) : new Color(0.4f, 0.45f, 0.5f);
+            }
+        }
+
+        private void OnDisplayModeToggled()
+        {
+            bool nextFullscreen = !Screen.fullScreen;
+            Screen.fullScreen = nextFullscreen;
+
+            if (_displayModeToggleText != null)
+            {
+                _displayModeToggleText.text = nextFullscreen ? "[ 전체화면 ]" : "[ 창모드 ]";
+            }
+        }
+
+        private void OnResetHighScoreClicked()
+        {
+            PlayerPrefs.DeleteKey(HighScoreKey);
+            PlayerPrefs.Save();
+
+            if (_highScoreText != null)
+            {
+                _highScoreText.text = "최고 기록: 0m";
+            }
+
+            if (_resetFeedbackText != null)
+            {
+                if (_resetFeedbackRoutine != null) StopCoroutine(_resetFeedbackRoutine);
+                _resetFeedbackRoutine = StartCoroutine(ResetFeedbackRoutine());
+            }
+        }
+
+        private System.Collections.IEnumerator ResetFeedbackRoutine()
+        {
+            _resetFeedbackText.gameObject.SetActive(true);
+            yield return new WaitForSecondsRealtime(2.5f);
+            _resetFeedbackText.gameObject.SetActive(false);
+            _resetFeedbackRoutine = null;
+        }
+
+        #endregion
+
+        #region Splash Screen Management (스플래시 인트로 화면)
+
+        /// <summary>
+        /// 레트로 아케이드 감성의 스플래시 인트로 화면(로고, 프로그레스 바, 대학생 컨셉 문구)을 자동 생성합니다.
+        /// </summary>
+        private void EnsureSplashScreenUI(Canvas canvas, Font defaultFont)
+        {
+            if (_splashScreenPanel != null) return;
+
+            Transform existing = canvas.transform.Find("SplashScreen_Panel");
+            if (existing != null)
+            {
+                _splashScreenPanel = existing.gameObject;
+                _splashProgressFillRect = _splashScreenPanel.transform.Find("Content_Container/ProgressBar_Box/Fill_Area/Fill")?.GetComponent<RectTransform>();
+                _splashProgressPercentText = _splashScreenPanel.transform.Find("Content_Container/Percent_Text")?.GetComponent<Text>();
+                _splashStatusText = _splashScreenPanel.transform.Find("Content_Container/Status_Text")?.GetComponent<Text>();
+                return;
+            }
+
+            // [스플래시 전체 화면 루트 패널]
+            GameObject splashObj = new GameObject("SplashScreen_Panel");
+            splashObj.transform.SetParent(canvas.transform, false);
+
+            RectTransform splashRect = splashObj.AddComponent<RectTransform>();
+            splashRect.anchorMin = Vector2.zero;
+            splashRect.anchorMax = Vector2.one;
+            splashRect.sizeDelta = Vector2.zero;
+
+            Image bgImg = splashObj.AddComponent<Image>();
+            bgImg.color = new Color(0.045f, 0.055f, 0.085f, 1f); // 묵직하고 고급스러운 딥 다크 네이비
+
+            CanvasGroup cg = splashObj.AddComponent<CanvasGroup>();
+            cg.alpha = 1f;
+
+            _splashScreenPanel = splashObj;
+
+            // [중앙 컨텐츠 컨테이너]
+            GameObject contentObj = new GameObject("Content_Container");
+            contentObj.transform.SetParent(splashObj.transform, false);
+            RectTransform contentRect = contentObj.AddComponent<RectTransform>();
+            contentRect.anchorMin = new Vector2(0.5f, 0.5f);
+            contentRect.anchorMax = new Vector2(0.5f, 0.5f);
+            contentRect.pivot = new Vector2(0.5f, 0.5f);
+            contentRect.anchoredPosition = Vector2.zero;
+            contentRect.sizeDelta = new Vector2(1000f, 700f);
+            contentObj.transform.localScale = new Vector3(0.92f, 0.92f, 0.92f);
+
+            // 1. 상단 프로젝트 배지
+            GameObject badgeObj = new GameObject("Badge_Text");
+            badgeObj.transform.SetParent(contentObj.transform, false);
+            RectTransform badgeRect = badgeObj.AddComponent<RectTransform>();
+            badgeRect.anchoredPosition = new Vector2(0f, 230f);
+            badgeRect.sizeDelta = new Vector2(600f, 40f);
+            Text badgeText = badgeObj.AddComponent<Text>();
+            badgeText.font = defaultFont;
+            badgeText.fontSize = 22;
+            badgeText.fontStyle = FontStyle.Bold;
+            badgeText.color = new Color(1f, 0.76f, 0.22f); // 골드 오렌지
+            badgeText.alignment = TextAnchor.MiddleCenter;
+            badgeText.text = "⚡ CAMPUS SURVIVAL ACTION ⚡";
+            Shadow badgeShadow = badgeObj.AddComponent<Shadow>();
+            badgeShadow.effectColor = new Color(0f, 0f, 0f, 0.8f);
+            badgeShadow.effectDistance = new Vector2(2f, -2f);
+
+            // 2. 메인 영문 로고 타이틀: CAMPUS RUN
+            GameObject titleObj = new GameObject("MainTitle_Text");
+            titleObj.transform.SetParent(contentObj.transform, false);
+            RectTransform titleRect = titleObj.AddComponent<RectTransform>();
+            titleRect.anchoredPosition = new Vector2(0f, 150f);
+            titleRect.sizeDelta = new Vector2(900f, 120f);
+            Text titleText = titleObj.AddComponent<Text>();
+            titleText.font = defaultFont;
+            titleText.fontSize = 92;
+            titleText.fontStyle = FontStyle.Normal;
+            titleText.color = new Color(1f, 0.88f, 0.2f); // 화려한 레트로 골드 옐로우
+            titleText.alignment = TextAnchor.MiddleCenter;
+            titleText.text = "CAMPUS RUN";
+
+            Outline titleOutline = titleObj.AddComponent<Outline>();
+            titleOutline.effectColor = new Color(0.12f, 0.05f, 0.02f, 0.95f);
+            titleOutline.effectDistance = new Vector2(3f, -3f);
+            Shadow titleShadow = titleObj.AddComponent<Shadow>();
+            titleShadow.effectColor = new Color(0f, 0f, 0f, 0.9f);
+            titleShadow.effectDistance = new Vector2(4f, -4f);
+
+            // 3. 한글 서브 타이틀: 캠퍼스 런 : 지각 5분전!!
+            GameObject subTitleObj = new GameObject("SubTitle_Text");
+            subTitleObj.transform.SetParent(contentObj.transform, false);
+            RectTransform subTitleRect = subTitleObj.AddComponent<RectTransform>();
+            subTitleRect.anchoredPosition = new Vector2(0f, 75f);
+            subTitleRect.sizeDelta = new Vector2(800f, 55f);
+            Text subTitleText = subTitleObj.AddComponent<Text>();
+            subTitleText.font = defaultFont;
+            subTitleText.fontSize = 38;
+            subTitleText.fontStyle = FontStyle.Normal;
+            subTitleText.color = new Color(0.28f, 0.98f, 0.48f); // 에메랄드 그린
+            subTitleText.alignment = TextAnchor.MiddleCenter;
+            subTitleText.text = "캠 퍼 스 런 : 지 각  5 분 전 ! !";
+            Shadow subTitleShadow = subTitleObj.AddComponent<Shadow>();
+            subTitleShadow.effectColor = new Color(0f, 0f, 0f, 0.85f);
+            subTitleShadow.effectDistance = new Vector2(2f, -2f);
+
+            // 4. 중앙 도트 이모지 심볼
+            GameObject emojiObj = new GameObject("Emoji_Text");
+            emojiObj.transform.SetParent(contentObj.transform, false);
+            RectTransform emojiRect = emojiObj.AddComponent<RectTransform>();
+            emojiRect.anchoredPosition = new Vector2(0f, 5f);
+            emojiRect.sizeDelta = new Vector2(600f, 60f);
+            Text emojiText = emojiObj.AddComponent<Text>();
+            emojiText.font = defaultFont;
+            emojiText.fontSize = 44;
+            emojiText.alignment = TextAnchor.MiddleCenter;
+            emojiText.text = "🏃‍♂️💨   ⏰   🏫";
+
+            // 5. 스토리 인트로 안내 문구
+            GameObject storyObj = new GameObject("Story_Text");
+            storyObj.transform.SetParent(contentObj.transform, false);
+            RectTransform storyRect = storyObj.AddComponent<RectTransform>();
+            storyRect.anchoredPosition = new Vector2(0f, -65f);
+            storyRect.sizeDelta = new Vector2(800f, 40f);
+            Text storyText = storyObj.AddComponent<Text>();
+            storyText.font = defaultFont;
+            storyText.fontSize = 22;
+            storyText.color = new Color(0.88f, 0.92f, 0.96f, 0.9f);
+            storyText.alignment = TextAnchor.MiddleCenter;
+            storyText.text = "1교시 출석 마감 직전! 셔틀버스를 피하고 강의실로 질주하라!";
+
+            // 6. 로딩 프로그레스 바 컨테이너
+            GameObject barBoxObj = new GameObject("ProgressBar_Box");
+            barBoxObj.transform.SetParent(contentObj.transform, false);
+            RectTransform barBoxRect = barBoxObj.AddComponent<RectTransform>();
+            barBoxRect.anchoredPosition = new Vector2(0f, -145f);
+            barBoxRect.sizeDelta = new Vector2(560f, 26f);
+
+            Image barBg = barBoxObj.AddComponent<Image>();
+            barBg.color = new Color(0.12f, 0.14f, 0.19f, 0.95f);
+
+            Outline barOutline = barBoxObj.AddComponent<Outline>();
+            barOutline.effectColor = new Color(0.24f, 0.28f, 0.38f, 0.85f);
+            barOutline.effectDistance = new Vector2(2f, -2f);
+
+            // Fill Area & Fill
+            GameObject fillArea = new GameObject("Fill_Area");
+            fillArea.transform.SetParent(barBoxObj.transform, false);
+            RectTransform fillAreaRect = fillArea.AddComponent<RectTransform>();
+            fillAreaRect.anchorMin = Vector2.zero;
+            fillAreaRect.anchorMax = Vector2.one;
+            fillAreaRect.sizeDelta = new Vector2(-6f, -6f);
+
+            GameObject fillObj = new GameObject("Fill");
+            fillObj.transform.SetParent(fillArea.transform, false);
+            _splashProgressFillRect = fillObj.AddComponent<RectTransform>();
+            _splashProgressFillRect.anchorMin = new Vector2(0f, 0f);
+            _splashProgressFillRect.anchorMax = new Vector2(0f, 1f);
+            _splashProgressFillRect.pivot = new Vector2(0f, 0.5f);
+            _splashProgressFillRect.sizeDelta = new Vector2(0f, 0f);
+
+            Image fillImg = fillObj.AddComponent<Image>();
+            fillImg.color = new Color(0.22f, 0.88f, 0.45f, 1f); // 산뜻한 에메랄드 그린
+
+            // 7. 퍼센트 텍스트
+            GameObject percentObj = new GameObject("Percent_Text");
+            percentObj.transform.SetParent(contentObj.transform, false);
+            RectTransform percentRect = percentObj.AddComponent<RectTransform>();
+            percentRect.anchoredPosition = new Vector2(0f, -188f);
+            percentRect.sizeDelta = new Vector2(200f, 36f);
+            _splashProgressPercentText = percentObj.AddComponent<Text>();
+            _splashProgressPercentText.font = defaultFont;
+            _splashProgressPercentText.fontSize = 24;
+            _splashProgressPercentText.fontStyle = FontStyle.Bold;
+            _splashProgressPercentText.color = new Color(1f, 0.88f, 0.25f);
+            _splashProgressPercentText.alignment = TextAnchor.MiddleCenter;
+            _splashProgressPercentText.text = "0%";
+
+            // 8. 대학생 컨셉 상태 텍스트
+            GameObject statusObj = new GameObject("Status_Text");
+            statusObj.transform.SetParent(contentObj.transform, false);
+            RectTransform statusRect = statusObj.AddComponent<RectTransform>();
+            statusRect.anchoredPosition = new Vector2(0f, -225f);
+            statusRect.sizeDelta = new Vector2(700f, 36f);
+            _splashStatusText = statusObj.AddComponent<Text>();
+            _splashStatusText.font = defaultFont;
+            _splashStatusText.fontSize = 20;
+            _splashStatusText.color = new Color(0.48f, 0.88f, 1f, 0.95f);
+            _splashStatusText.alignment = TextAnchor.MiddleCenter;
+            _splashStatusText.text = SplashStatusMessages[0];
+
+            // 9. 스킵 안내 텍스트
+            GameObject skipObj = new GameObject("Skip_Prompt_Text");
+            skipObj.transform.SetParent(contentObj.transform, false);
+            RectTransform skipRect = skipObj.AddComponent<RectTransform>();
+            skipRect.anchoredPosition = new Vector2(0f, -280f);
+            skipRect.sizeDelta = new Vector2(600f, 34f);
+            Text skipText = skipObj.AddComponent<Text>();
+            skipText.font = defaultFont;
+            skipText.fontSize = 18;
+            skipText.color = new Color(1f, 1f, 1f, 0.5f);
+            skipText.alignment = TextAnchor.MiddleCenter;
+            skipText.text = "[ SPACE / ENTER / 클릭 시 즉시 스킵 ]";
+
+            _splashScreenPanel.SetActive(false);
+        }
+
+        /// <summary>
+        /// 스플래시 화면 진행 시퀀스 코루틴입니다.
+        /// </summary>
+        private System.Collections.IEnumerator SplashScreenSequenceRoutine()
+        {
+            if (_splashScreenPanel == null) yield break;
+
+            CanvasGroup cg = _splashScreenPanel.GetComponent<CanvasGroup>();
+            if (cg != null) cg.alpha = 1f;
+
+            float maxBarWidth = 554f; // 560f - 6f padding
+            float elapsed = 0f;
+            float duration = Mathf.Max(1.5f, _splashDuration);
+
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                float progress = Mathf.Clamp01(elapsed / duration);
+
+                // 부드러운 가속도 (SmoothStep 곡선)
+                float smoothed = Mathf.SmoothStep(0f, 1f, progress);
+                int percentInt = Mathf.Clamp(Mathf.RoundToInt(smoothed * 100f), 0, 100);
+
+                // 1. 프로그레스 바 Fill 너비 갱신
+                if (_splashProgressFillRect != null)
+                {
+                    _splashProgressFillRect.sizeDelta = new Vector2(maxBarWidth * smoothed, 0f);
+                }
+
+                // 2. 캐싱된 퍼센트 텍스트 갱신 (GC Alloc 0B)
+                if (_splashProgressPercentText != null)
+                {
+                    _splashProgressPercentText.text = CachedPercentStrings[percentInt];
+                }
+
+                // 3. 진행도별 상태 메시지 전환 (GC Alloc 0B)
+                if (_splashStatusText != null)
+                {
+                    int msgIdx = Mathf.Min(percentInt / 20, SplashStatusMessages.Length - 1);
+                    _splashStatusText.text = SplashStatusMessages[msgIdx];
+                }
+
+                yield return null;
+            }
+
+            // 100% 도달 완료
+            if (_splashProgressFillRect != null) _splashProgressFillRect.sizeDelta = new Vector2(maxBarWidth, 0f);
+            if (_splashProgressPercentText != null) _splashProgressPercentText.text = CachedPercentStrings[100];
+            if (_splashStatusText != null) _splashStatusText.text = SplashStatusMessages[4];
+
+            yield return new WaitForSeconds(0.25f);
+
+            // 스플래시 화면 페이드아웃 및 홈 화면으로 전환
+            yield return StartCoroutine(FadeOutSplashScreenRoutine());
+        }
+
+        /// <summary>
+        /// 유저가 키 입력이나 클릭으로 스플래시를 즉시 건너뛸 때 호출됩니다.
+        /// </summary>
+        public void SkipSplashScreen()
+        {
+            if (!_isSplashActive) return;
+
+            if (_splashSequenceRoutine != null)
+            {
+                StopCoroutine(_splashSequenceRoutine);
+                _splashSequenceRoutine = null;
+            }
+
+            StartCoroutine(FadeOutSplashScreenRoutine(fastSkip: true));
+        }
+
+        private System.Collections.IEnumerator FadeOutSplashScreenRoutine(bool fastSkip = false)
+        {
+            if (_splashScreenPanel == null)
+            {
+                EndSplashScreen();
+                yield break;
+            }
+
+            CanvasGroup cg = _splashScreenPanel.GetComponent<CanvasGroup>();
+            float fadeDuration = fastSkip ? 0.2f : 0.35f;
+            float elapsed = 0f;
+
+            while (elapsed < fadeDuration)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / fadeDuration);
+                if (cg != null) cg.alpha = 1f - t;
+                yield return null;
+            }
+
+            EndSplashScreen();
+        }
+
+        private void EndSplashScreen()
+        {
+            _isSplashActive = false;
+
+            if (_splashScreenPanel != null)
+            {
+                _splashScreenPanel.SetActive(false);
+            }
+
+            // 홈 타이틀 화면 및 홈 설정 버튼 활성화
+            if (_titleScreenPanel != null)
+            {
+                _titleScreenPanel.SetActive(true);
+            }
+
+            if (_settingsButton != null)
+            {
+                _settingsButton.gameObject.SetActive(true);
+            }
+
+            StartPromptPulse();
+        }
+
+        #endregion
     }
 }

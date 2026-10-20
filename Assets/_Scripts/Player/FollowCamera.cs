@@ -46,6 +46,14 @@ namespace CampusRun.Player
         [Tooltip("카메라 추격 지연 시간(초) - 작을수록 즉각 반응")]
         [SerializeField] private float _smoothTime = 0.15f;
 
+        [Header("--- 좌우(X축) 시야 추격 설정 ---")]
+        [Tooltip("플레이어의 좌우 이동을 카메라가 얼마나 따라갈지 비율 (0.0: 트랙 중앙 고정, 0.22: 화면 가장자리 이동을 자연스럽게 보여주는 부드러운 완충 추격, 1.0: 1:1 추격)")]
+        [Range(0f, 1f)]
+        [SerializeField] private float _horizontalFollowFactor = 0.22f;
+
+        [Tooltip("카메라 중심점의 좌우 최대 허용 편차 (트랙 중심 유지용)")]
+        [SerializeField] private float _maxHorizontalCameraOffset = 1.2f;
+
         [Header("--- 카메라 이동 방식 ---")]
         [Tooltip("플레이어가 앞으로 전진할 때만 카메라가 앞으로 이동 (뒤로 물러서도 카메라는 후퇴하지 않음)")]
         [SerializeField] private bool _onlyAdvanceForward = true;
@@ -195,7 +203,9 @@ namespace CampusRun.Player
 
             // 2. 부드러운 위치 추격 (SmoothDamp)
             // [중요] 플레이어의 점프(Y축 덜컹거림)를 무시하고 바닥(0f) 기준으로 고정하여 시점 튐/멀미 완전 방지
-            Vector3 targetPosition = new Vector3(_target.position.x, 0f, _currentBaseZ) + _offset;
+            // [개선] X축 1:1 무한 추적 대신 완충 계수를 적용하여, 플레이어가 가장자리로 이동하거나 표류 시 화면 밖(경계 부표)으로 이동함을 명확히 인지할 수 있도록 처리
+            float targetX = Mathf.Clamp(_target.position.x * _horizontalFollowFactor, -_maxHorizontalCameraOffset, _maxHorizontalCameraOffset);
+            Vector3 targetPosition = new Vector3(targetX, 0f, _currentBaseZ) + _offset;
             transform.position = Vector3.SmoothDamp(transform.position, targetPosition, ref _currentVelocity, _smoothTime);
 
             // 카메라 쉐이크 오프셋 반영 (충돌 및 물 빠짐 시 진동)
@@ -244,7 +254,8 @@ namespace CampusRun.Player
         {
             if (_target != null)
             {
-                transform.position = new Vector3(_target.position.x, 0f, _target.position.z) + _offset;
+                float targetX = Mathf.Clamp(_target.position.x * _horizontalFollowFactor, -_maxHorizontalCameraOffset, _maxHorizontalCameraOffset);
+                transform.position = new Vector3(targetX, 0f, _target.position.z) + _offset;
                 ApplyFixedRotation();
             }
         }

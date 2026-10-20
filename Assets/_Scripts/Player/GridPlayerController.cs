@@ -80,6 +80,7 @@ namespace CampusRun.Player
         private float _idleTimer = 0f;
         private bool _hasMovedAtLeastOnce = false;
         private bool _isWarningTriggered = false;
+        private bool _isBoundaryWarningTriggered = false;
 
         // 인풋 버퍼링 및 연속 조작 상태 변수
         private Vector3Int? _bufferedHopDirection = null;
@@ -445,6 +446,12 @@ namespace CampusRun.Player
                 GameEvents.TriggerInactivityWarning(false);
             }
 
+            if (_isBoundaryWarningTriggered)
+            {
+                _isBoundaryWarningTriggered = false;
+                GameEvents.TriggerBoundaryWarning(false, 0f, false);
+            }
+
             // 최고 기록 전진 여부 확인 (앞으로 최고 기록 갱신 시 1칸당 10m 누적)
             if (_currentGridZ > _maxReachedGridZ)
             {
@@ -672,7 +679,7 @@ namespace CampusRun.Player
 
                 if (_drownCoroutine != null) StopCoroutine(_drownCoroutine);
                 _drownCoroutine = StartCoroutine(DrownRoutine());
-                Die("🌊 비 온 뒤 거대 물웅덩이에 빠져 지각 탈락했습니다!");
+                Die("[!] 비 온 뒤 거대 물웅덩이에 빠져 지각 탈락했습니다!");
                 return;
             }
 
@@ -689,11 +696,36 @@ namespace CampusRun.Player
 
             transform.position = new Vector3(transform.position.x + deltaX, plankSurfaceY, transform.position.z);
 
-            // 화면 좌우 한계를 너무 많이 벗어나면 화면 밖 표류 탈락
             float currentX = transform.position.x;
-            if (currentX < (_minGridX - 1.2f) * _gridSize || currentX > (_maxGridX + 1.2f) * _gridSize)
+            float boundaryLimit = 5.0f; // 경계선 아웃 탈락 기준 (X = ±5.0m)
+            float warningThreshold = 3.8f; // 경계 위험 경고 시작선 (X = ±3.8m)
+
+            // 1. 하천 좌우 경계선 근접 위험 경고
+            if (Mathf.Abs(currentX) >= warningThreshold)
             {
-                Die("[!] 널판지를 타고 화면 밖으로 떠내려가 지각 탈락했습니다!");
+                float dangerProgress = Mathf.Clamp01((Mathf.Abs(currentX) - warningThreshold) / (boundaryLimit - warningThreshold));
+                bool isRight = (currentX > 0f);
+                _isBoundaryWarningTriggered = true;
+                GameEvents.TriggerBoundaryWarning(true, dangerProgress, isRight);
+            }
+            else if (_isBoundaryWarningTriggered)
+            {
+                _isBoundaryWarningTriggered = false;
+                GameEvents.TriggerBoundaryWarning(false, 0f, false);
+            }
+
+            // 2. 경계선 돌파 시 하천 경계 밖 익사 탈락
+            if (currentX < -boundaryLimit || currentX > boundaryLimit)
+            {
+                if (_isBoundaryWarningTriggered)
+                {
+                    _isBoundaryWarningTriggered = false;
+                    GameEvents.TriggerBoundaryWarning(false, 0f, false);
+                }
+
+                if (_drownCoroutine != null) StopCoroutine(_drownCoroutine);
+                _drownCoroutine = StartCoroutine(DrownRoutine());
+                Die("[!] 하천 경계선 밖으로 떠내려가 지각 탈락했습니다!");
                 return;
             }
 
@@ -957,6 +989,12 @@ namespace CampusRun.Player
                 GameEvents.TriggerInactivityWarning(false);
             }
 
+            if (_isBoundaryWarningTriggered)
+            {
+                _isBoundaryWarningTriggered = false;
+                GameEvents.TriggerBoundaryWarning(false, 0f, false);
+            }
+
             Debug.LogWarning($"[CampusRun] 게임오버! {deathReason} (최종 거리: {_maxReachedGridZ * 10}m)");
 
             if (_hopCoroutine != null)
@@ -977,7 +1015,18 @@ namespace CampusRun.Player
 
         private void HandleGameStateChanged(GameState state)
         {
-            _isControlEnabled = (state == GameState.Playing);
+            if (state == GameState.Paused || state == GameState.GameOver)
+            {
+                _isControlEnabled = false;
+            }
+            else if (state == GameState.Playing)
+            {
+                _isControlEnabled = true;
+            }
+            else if (state == GameState.Ready)
+            {
+                _isControlEnabled = true;
+            }
         }
 
         private void ResetPlayer()
@@ -1011,7 +1060,9 @@ namespace CampusRun.Player
             _idleTimer = 0f;
             _hasMovedAtLeastOnce = false;
             _isWarningTriggered = false;
+            _isBoundaryWarningTriggered = false;
             GameEvents.TriggerInactivityWarning(false);
+            GameEvents.TriggerBoundaryWarning(false, 0f, false);
 
             _bufferedHopDirection = null;
             _bufferedHopTimer = 0f;
