@@ -4,6 +4,7 @@ using UnityEngine.InputSystem;
 using CampusRun.Core;
 using CampusRun.Obstacles;
 using CampusRun.Track;
+using CampusRun.Effects;
 
 namespace CampusRun.Player
 {
@@ -20,10 +21,10 @@ namespace CampusRun.Player
         [SerializeField] private float _gridSize = 1.0f;
 
         [Tooltip("1칸 점프에 걸리는 시간(초) - 날렵하고 즉각적인 반응성")]
-        [SerializeField] private float _hopDuration = 0.14f;
+        [SerializeField] private float _hopDuration = 0.16f;
 
         [Tooltip("점프 시 Y축 최고 정점 높이 - 과도한 붕 뜸 방지")]
-        [SerializeField] private float _jumpPeakHeight = 0.28f;
+        [SerializeField] private float _jumpPeakHeight = 0.35f;
 
         [Tooltip("좌/우 이동 가능한 최소/최대 X 격자 한계")]
         [SerializeField] private int _minGridX = -4;
@@ -53,8 +54,8 @@ namespace CampusRun.Player
         [SerializeField] private Transform _visualModelTransform;
 
         [Tooltip("점프 시 일시적 스쿼시/스트레치 비율 (X, Y, Z)")]
-        [SerializeField] private Vector3 _jumpStretchScale = new Vector3(0.8f, 1.25f, 0.8f);
-        [SerializeField] private Vector3 _landSquashScale = new Vector3(1.25f, 0.75f, 1.25f);
+        [SerializeField] private Vector3 _jumpStretchScale = new Vector3(0.85f, 1.18f, 0.85f);
+        [SerializeField] private Vector3 _landSquashScale = new Vector3(1.15f, 0.85f, 1.15f);
 
         [Header("--- 타임아웃 (지체 감지 / 교수님의 매의 눈 기믹) ---")]
         [Tooltip("한 자리에 오래 머물 때 시간초과 탈락 활성화 여부")]
@@ -537,8 +538,8 @@ namespace CampusRun.Player
                         _visualModelTransform.localScale = Vector3.Lerp(_jumpStretchScale, _originalModelScale, (t - 0.5f) * 2f);
                     }
 
-                    // 점프 시 진행 방향으로 살짝 몸을 숙였다가(최대 12도) 착지 시 세움
-                    float tiltAngle = Mathf.Sin(t * Mathf.PI) * 12f;
+                    // 점프 시 진행 방향으로 살짝 몸을 숙였다가(최대 6도) 착지 시 세움
+                    float tiltAngle = Mathf.Sin(t * Mathf.PI) * 6f;
                     _visualModelTransform.localRotation = Quaternion.Euler(tiltAngle, 0f, 0f);
                 }
 
@@ -557,6 +558,9 @@ namespace CampusRun.Player
 
             if (_isAlive)
             {
+                // 생존 상태로 지면에 착지했을 때 은은하고 작은 미니 도트 모래먼지 연출
+                ImpactVFXManager.PlayDustPuff(targetPos);
+
                 // 선입력 버퍼에 대기 중인 다음 입력이 있다면 지체 없이 즉시 다음 점프 개시
                 if (!ConsumeBufferedInputIfReady())
                 {
@@ -645,6 +649,9 @@ namespace CampusRun.Player
             // 2. 널판지가 없는데 거대 물웅덩이 레인에 떨어진 경우 -> 퐁당 익사 탈락
             if (isWaterGround)
             {
+                ImpactVFXManager.PlayWaterSplash(landedPos);
+                CameraShake.ShakeOnWaterSplash();
+
                 if (_drownCoroutine != null) StopCoroutine(_drownCoroutine);
                 _drownCoroutine = StartCoroutine(DrownRoutine());
                 Die("🌊 비 온 뒤 거대 물웅덩이에 빠져 지각 탈락했습니다!");
@@ -668,7 +675,7 @@ namespace CampusRun.Player
             float currentX = transform.position.x;
             if (currentX < (_minGridX - 1.2f) * _gridSize || currentX > (_maxGridX + 1.2f) * _gridSize)
             {
-                Die("🌊 널판지를 타고 화면 밖으로 떠내려가 지각 탈락했습니다!");
+                Die("[!] 널판지를 타고 화면 밖으로 떠내려가 지각 탈락했습니다!");
                 return;
             }
 
@@ -742,6 +749,49 @@ namespace CampusRun.Player
         }
 
         /// <summary>
+        /// 단독 빌드(.exe)에서도 셰이더 스트리핑으로 인해 핑크색(마젠타)으로 깨지지 않도록
+        /// 씬에 이미 로드된 플레이어의 URP 셰이더를 기반으로 단색 머티리얼을 안전하게 생성합니다.
+        /// </summary>
+        private Material CreateHawkMaterial(Shader baseShader, Color color)
+        {
+            Material mat = new Material(baseShader);
+            mat.color = color;
+            if (mat.HasProperty("_BaseColor"))
+            {
+                mat.SetColor("_BaseColor", color);
+            }
+            if (mat.HasProperty("_Color"))
+            {
+                mat.SetColor("_Color", color);
+            }
+            if (mat.HasProperty("_Smoothness"))
+            {
+                mat.SetFloat("_Smoothness", 0.1f);
+            }
+            return mat;
+        }
+
+        private GameObject CreateHawkPart(string partName, Transform parent, Vector3 localPos, Vector3 localScale, Material sharedMat)
+        {
+            GameObject part = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            part.name = partName;
+            part.transform.SetParent(parent, false);
+            part.transform.localPosition = localPos;
+            part.transform.localScale = localScale;
+
+            Collider col = part.GetComponent<Collider>();
+            if (col != null) Destroy(col);
+
+            Renderer rend = part.GetComponent<Renderer>();
+            if (rend != null && sharedMat != null)
+            {
+                rend.sharedMaterial = sharedMat;
+                rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
+            }
+            return part;
+        }
+
+        /// <summary>
         /// 길건너 친구들 특유의 '독수리 낚아채기'를 패러디한 '교수님의 매 급습' 탈락 연출입니다.
         /// 하늘 뒤편에서 매가 쏜살같이 급강하하여 플레이어를 발톱으로 낚아채 하늘 위로 데려갑니다.
         /// </summary>
@@ -755,50 +805,65 @@ namespace CampusRun.Player
                 GameEvents.TriggerInactivityWarning(false);
             }
 
-            // 1. 교수님의 매(Hawk) 임시 연출 오브젝트 생성
+            // .exe 빌드에서도 절대 깨지지 않도록 현재 캐릭터가 사용 중인 검증된 URP 셰이더를 우선 참조
+            Shader validShader = null;
+            Renderer playerRend = GetComponentInChildren<Renderer>();
+            if (playerRend != null && playerRend.sharedMaterial != null && playerRend.sharedMaterial.shader != null)
+            {
+                validShader = playerRend.sharedMaterial.shader;
+            }
+            if (validShader == null) validShader = Shader.Find("Universal Render Pipeline/Lit");
+            if (validShader == null) validShader = Shader.Find("Universal Render Pipeline/Simple Lit");
+            if (validShader == null) validShader = Shader.Find("Sprites/Default");
+
+            Material matDarkBrown = CreateHawkMaterial(validShader, new Color(0.26f, 0.16f, 0.09f));
+            Material matWingBrown = CreateHawkMaterial(validShader, new Color(0.20f, 0.12f, 0.06f));
+            Material matWhiteHead = CreateHawkMaterial(validShader, new Color(0.95f, 0.94f, 0.90f));
+            Material matGoldBeak = CreateHawkMaterial(validShader, new Color(1.0f, 0.76f, 0.12f));
+            Material matBlackEye = CreateHawkMaterial(validShader, new Color(0.08f, 0.08f, 0.08f));
+
+            // 1. 교수님의 매(독수리) 복셀 모델 조립
             GameObject hawkObj = new GameObject("[Hawk_Professor_Snatcher]");
-            
-            // 몸통
-            GameObject body = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            body.name = "Body";
-            body.transform.SetParent(hawkObj.transform, false);
-            body.transform.localScale = new Vector3(0.9f, 0.45f, 1.4f);
-            Destroy(body.GetComponent<Collider>());
-            
-            // 날개 (좌우로 넓게 펼친 날개)
-            GameObject wings = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            wings.name = "Wings";
-            wings.transform.SetParent(hawkObj.transform, false);
-            wings.transform.localPosition = new Vector3(0f, 0.1f, 0.1f);
-            wings.transform.localScale = new Vector3(2.6f, 0.12f, 0.8f);
-            Destroy(wings.GetComponent<Collider>());
 
-            // 황금빛 부리
-            GameObject beak = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            beak.name = "Beak";
-            beak.transform.SetParent(hawkObj.transform, false);
-            beak.transform.localPosition = new Vector3(0f, -0.05f, 0.8f);
-            beak.transform.localScale = new Vector3(0.28f, 0.22f, 0.35f);
-            Destroy(beak.GetComponent<Collider>());
+            // 몸통 & 가슴
+            CreateHawkPart("Body", hawkObj.transform, new Vector3(0f, 0f, 0f), new Vector3(0.75f, 0.48f, 1.15f), matDarkBrown);
+            // 흰색 독수리 머리
+            CreateHawkPart("Head", hawkObj.transform, new Vector3(0f, 0.22f, 0.52f), new Vector3(0.56f, 0.46f, 0.54f), matWhiteHead);
+            // 매서운 황금 부리 (윗부리 + 갈고리 끝)
+            CreateHawkPart("Beak_Upper", hawkObj.transform, new Vector3(0f, 0.16f, 0.88f), new Vector3(0.26f, 0.20f, 0.32f), matGoldBeak);
+            CreateHawkPart("Beak_Hook", hawkObj.transform, new Vector3(0f, 0.06f, 0.98f), new Vector3(0.20f, 0.16f, 0.14f), matGoldBeak);
+            // 양쪽 눈
+            CreateHawkPart("Eye_L", hawkObj.transform, new Vector3(-0.29f, 0.26f, 0.60f), new Vector3(0.05f, 0.10f, 0.10f), matBlackEye);
+            CreateHawkPart("Eye_R", hawkObj.transform, new Vector3(0.29f, 0.26f, 0.60f), new Vector3(0.05f, 0.10f, 0.10f), matBlackEye);
+            // 흰색 꼬리 날개
+            CreateHawkPart("Tail", hawkObj.transform, new Vector3(0f, 0.05f, -0.72f), new Vector3(0.65f, 0.14f, 0.45f), matWhiteHead);
+            // 발톱 (좌/우)
+            CreateHawkPart("Talon_L", hawkObj.transform, new Vector3(-0.22f, -0.32f, 0.15f), new Vector3(0.14f, 0.22f, 0.18f), matGoldBeak);
+            CreateHawkPart("Talon_R", hawkObj.transform, new Vector3(0.22f, -0.32f, 0.15f), new Vector3(0.14f, 0.22f, 0.18f), matGoldBeak);
 
-            // 컬러 설정 (어두운 브라운 몸체, 황금 부리)
-            Renderer bodyRend = body.GetComponent<Renderer>();
-            if (bodyRend != null) bodyRend.material.color = new Color(0.24f, 0.15f, 0.08f);
-            Renderer wingsRend = wings.GetComponent<Renderer>();
-            if (wingsRend != null) wingsRend.material.color = new Color(0.18f, 0.10f, 0.05f);
-            Renderer beakRend = beak.GetComponent<Renderer>();
-            if (beakRend != null) beakRend.material.color = new Color(1f, 0.75f, 0.1f);
+            // 좌/우 날개 피벗 (날개짓 애니메이션용)
+            GameObject leftWingPivot = new GameObject("WingPivot_L");
+            leftWingPivot.transform.SetParent(hawkObj.transform, false);
+            leftWingPivot.transform.localPosition = new Vector3(-0.35f, 0.12f, 0.05f);
+            CreateHawkPart("Wing_L_Inner", leftWingPivot.transform, new Vector3(-0.55f, 0f, 0f), new Vector3(1.15f, 0.12f, 0.72f), matWingBrown);
+            CreateHawkPart("Wing_L_Tip", leftWingPivot.transform, new Vector3(-1.25f, 0.02f, -0.06f), new Vector3(0.55f, 0.09f, 0.54f), matDarkBrown);
+
+            GameObject rightWingPivot = new GameObject("WingPivot_R");
+            rightWingPivot.transform.SetParent(hawkObj.transform, false);
+            rightWingPivot.transform.localPosition = new Vector3(0.35f, 0.12f, 0.05f);
+            CreateHawkPart("Wing_R_Inner", rightWingPivot.transform, new Vector3(0.55f, 0f, 0f), new Vector3(1.15f, 0.12f, 0.72f), matWingBrown);
+            CreateHawkPart("Wing_R_Tip", rightWingPivot.transform, new Vector3(1.25f, 0.02f, -0.06f), new Vector3(0.55f, 0.09f, 0.54f), matDarkBrown);
 
             Vector3 playerPos = transform.position;
-            Vector3 startPos = playerPos + new Vector3(-2f, 8.5f, -7.5f);
-            Vector3 snatchPos = playerPos + new Vector3(0f, 0.35f, 0f);
-            Vector3 escapePos = playerPos + new Vector3(3f, 14f, 12f);
+            Vector3 startPos = playerPos + new Vector3(-2.5f, 7.5f, -6.5f);
+            Vector3 snatchPos = playerPos + new Vector3(0f, 0.95f, 0f);
+            Vector3 escapePos = playerPos + new Vector3(2.5f, 11.5f, 10.5f);
 
             hawkObj.transform.position = startPos;
             hawkObj.transform.LookAt(snatchPos);
 
-            // 1단계: 0.25초 만에 하늘 뒤편에서 급강하(Swoop Down)
-            float swoopDuration = 0.25f;
+            // 1단계: 0.28초 만에 하늘 뒤편에서 급강하(Swoop Down)
+            float swoopDuration = 0.28f;
             float elapsed = 0f;
             while (elapsed < swoopDuration)
             {
@@ -807,31 +872,48 @@ namespace CampusRun.Player
                 float smoothT = Mathf.SmoothStep(0f, 1f, t);
                 hawkObj.transform.position = Vector3.Lerp(startPos, snatchPos, smoothT);
                 hawkObj.transform.LookAt(snatchPos);
+
+                // 급강하 중 날개 각도 연출
+                float flapAngle = Mathf.Sin(elapsed * 45f) * 22f;
+                leftWingPivot.transform.localRotation = Quaternion.Euler(0f, 0f, -flapAngle);
+                rightWingPivot.transform.localRotation = Quaternion.Euler(0f, 0f, flapAngle);
                 yield return null;
             }
 
-            // 2단계: 플레이어 낚아채기 (매에 달라붙음)
+            // 2단계: 플레이어 낚아채기 (SetParent로 인한 회전/스케일 깨짐 없이 발톱 위치에 직접 동기화)
             hawkObj.transform.position = snatchPos;
-            transform.SetParent(hawkObj.transform, true);
             hawkObj.transform.LookAt(escapePos);
+            CameraShake.ShakeOnCarCrash();
 
-            // 3단계: 0.35초 만에 하늘 높이 솟구치며 도주(Escape Skyward)
-            float flyDuration = 0.35f;
+            // 3단계: 0.40초 동안 힘차게 날개짓하며 하늘 높이 솟구쳐 도주(Escape Skyward)
+            float flyDuration = 0.40f;
             elapsed = 0f;
             while (elapsed < flyDuration)
             {
                 elapsed += Time.deltaTime;
                 float t = Mathf.Clamp01(elapsed / flyDuration);
                 float smoothT = Mathf.SmoothStep(0f, 1f, t);
-                hawkObj.transform.position = Vector3.Lerp(snatchPos, escapePos, smoothT);
+                Vector3 currentHawkPos = Vector3.Lerp(snatchPos, escapePos, smoothT);
+                hawkObj.transform.position = currentHawkPos;
+
+                // 플레이어가 독수리 발톱 아래에 매달려 함께 올라감 (회전/스케일 왜곡 방지)
+                transform.position = currentHawkPos + new Vector3(0f, -0.75f, 0f);
+
+                float flapAngle = Mathf.Sin(elapsed * 55f) * 32f;
+                leftWingPivot.transform.localRotation = Quaternion.Euler(0f, 0f, -flapAngle);
+                rightWingPivot.transform.localRotation = Quaternion.Euler(0f, 0f, flapAngle);
                 yield return null;
             }
 
-            // 4단계: 탈락 확정 및 오브젝트 정리
-            transform.SetParent(null, true);
+            // 4단계: 탈락 확정 및 임시 머티리얼/오브젝트 메모리 정리
             if (hawkObj != null) Destroy(hawkObj);
+            Destroy(matDarkBrown);
+            Destroy(matWingBrown);
+            Destroy(matWhiteHead);
+            Destroy(matGoldBeak);
+            Destroy(matBlackEye);
 
-            Die("🦅 교수님의 매의 눈: 1교시 지각으로 강제 F학점을 받았습니다!");
+            Die("[!] 교수님의 매의 눈: 1교시 지각으로 강제 F학점을 받았습니다!");
             _snatchCoroutine = null;
         }
 
