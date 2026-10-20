@@ -28,19 +28,19 @@ namespace CampusRun.Obstacles
         [SerializeField] private float _despawnBoundaryX = 28.0f;
 
         [Header("--- 경적(클락션) 설정 ---")]
-        [Tooltip("플레이어가 앞뒤 시야(Z축 5.5m 이내)에 있을 때 경적을 울릴 확률 (기본 0.22 = 22%, 약 4~5대 중 1대꼴)")]
+        [Tooltip("화면에 보이는 도로를 지날 때 경적을 울릴 확률 (기본 0.20 = 20%, 약 5대 중 1대꼴로 적절히 발생)")]
         [Range(0f, 1f)]
-        [SerializeField] private float _honkChance = 0.22f;
+        [SerializeField] private float _honkChance = 0.20f;
 
-        [Tooltip("경적 소리 볼륨 (기본 0.65, 엔진음 위로 명확히 들리도록 보정)")]
+        [Tooltip("경적 소리 볼륨 (기본 0.85, 엔진음 위로 명확히 들리는 선명한 음량)")]
         [Range(0f, 1f)]
-        [SerializeField] private float _honkVolume = 0.65f;
+        [SerializeField] private float _honkVolume = 0.85f;
 
-        [Tooltip("플레이어와 Z축(레인) 거리가 이 값 이내일 때만 경적 발생 (단위: m, 기본 5.5m = 시야 내 도로)")]
-        [SerializeField] private float _honkTriggerZDistance = 5.5f;
+        [Tooltip("플레이어와 Z축(화면 내 도로) 거리 허용 범위 (단위: m, 기본 14.0m = 화면에 보이는 모든 도로 포함)")]
+        [SerializeField] private float _honkTriggerZDistance = 14.0f;
 
         [Tooltip("전체 차량 경적 전역 최소 쿨다운 (초, 연속 소음 방지)")]
-        [SerializeField] private float _honkGlobalCooldown = 2.5f;
+        [SerializeField] private float _honkGlobalCooldown = 1.8f;
 
         // 전역 경적 쿨다운 관리 (GC 할당 0)
         private static float s_nextGlobalHonkTime = 0f;
@@ -72,11 +72,11 @@ namespace CampusRun.Obstacles
             }
 
             // 쿼터뷰 카메라에 최적화된 3D 공간 음향
-            _audioSource.spatialBlend = 0.85f;             // 3D 입체 음향 (좌우 패닝 및 거리감 유지)
+            _audioSource.spatialBlend = 0.80f;             // 3D 입체 음향
             _audioSource.rolloffMode = AudioRolloffMode.Linear; // 선형 거리 감쇠
-            _audioSource.minDistance = 8.0f;               // 카메라/플레이어 앞을 지날 때 최대 음량
-            _audioSource.maxDistance = 45.0f;              // 적절한 거리 감쇠
-            _audioSource.dopplerLevel = 0.0f;              // [중요!] 도플러 왜곡 제거로 깨끗한 음색 유지
+            _audioSource.minDistance = 9.0f;               // 카메라/플레이어 앞을 지날 때 최대 음량
+            _audioSource.maxDistance = 50.0f;              // 적절한 거리 감쇠
+            _audioSource.dopplerLevel = 0.0f;              // 도플러 왜곡 제거로 깨끗한 음색 유지
             _audioSource.playOnAwake = false;
         }
 
@@ -130,15 +130,15 @@ namespace CampusRun.Obstacles
             // X축 방향으로 등속 직선 이동 (월드 좌표 기준)
             transform.position += new Vector3(_direction * _speed * Time.deltaTime, 0f, 0f);
 
-            // 도로 중심(X=0 부근)을 지날 때 조건부 경적 (적절한 빈도와 볼륨 보장)
+            // 도로 중심(X=0 부근)을 지날 때 조건부 경적 (화면 내 차량 중 20% 확률로 빵!)
             if (!_hasHonked && Mathf.Abs(transform.position.x) < 4.0f)
             {
                 _hasHonked = true;
 
-                // 1. 전체 차량 경적 쿨다운 체크 (최소 2.5초 간격 유지)
+                // 1. 전체 차량 경적 쿨다운 체크 (최소 1.8초 간격 유지)
                 if (Time.time >= s_nextGlobalHonkTime)
                 {
-                    // 2. 플레이어 Z축(레인) 근접 여부 체크 (플레이어 시야 내 5.5m 이내 도로)
+                    // 2. 화면 내(Z축 14m 이내) 도로 여부 체크
                     Vector3 playerPos = GridPlayerController.Instance != null
                         ? GridPlayerController.Instance.transform.position
                         : (Camera.main != null ? Camera.main.transform.position : Vector3.zero);
@@ -146,7 +146,7 @@ namespace CampusRun.Obstacles
                     float zDiff = Mathf.Abs(transform.position.z - playerPos.z);
                     if (zDiff <= _honkTriggerZDistance)
                     {
-                        // 3. 약 22%의 밸런스 있는 확률 검사 (너무 시끄럽지 않고 가끔씩 빵!)
+                        // 3. 20%의 적절한 확률 검사 (원래 35%에서 절반으로 하향, 5대 중 1대꼴로 빵!)
                         if (UnityEngine.Random.value < _honkChance)
                         {
                             s_nextGlobalHonkTime = Time.time + _honkGlobalCooldown;
@@ -161,6 +161,7 @@ namespace CampusRun.Obstacles
                             if (klaxonClip != null && _audioSource != null && _audioSource.isActiveAndEnabled)
                             {
                                 _audioSource.PlayOneShot(klaxonClip, _honkVolume);
+                                Debug.Log($"[CampusRun] 차량 경적 울림! ({_vehicleDisplayName}, 볼륨: {_honkVolume})");
                             }
                         }
                     }
