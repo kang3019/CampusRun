@@ -1,16 +1,21 @@
 using UnityEngine;
-using CampusRun.Effects;
+using CampusRun.Obstacles;
 
 namespace CampusRun.Player
 {
     /// <summary>
     /// 플레이어와 장애물 간의 물리 충돌을 감지하여 게임오버 및 탈락 사유를 처리하는 컴포넌트입니다.
+    /// 장애물 종류(트럭, 승용차, 버스, 경찰차 등)에 맞추어 "~~에 치였습니다 !!" 문구를 제공합니다.
     /// </summary>
     [RequireComponent(typeof(GridPlayerController))]
     public class PlayerCollision : MonoBehaviour
     {
-        [Tooltip("기본 사망 메시지")]
-        [SerializeField] private string _defaultDeathReason = "장애물에 부딪혔습니다!";
+        [Header("--- 사망 메시지 설정 ---")]
+        [Tooltip("공통 사망 메시지 형식 ({0}에 장애물/차량 명칭 치환)")]
+        [SerializeField] private string _deathMessageFormat = "{0}에 치였습니다 !!";
+
+        [Tooltip("식별되지 않은 일반 장애물 사망 메시지")]
+        [SerializeField] private string _defaultDeathReason = "장애물에 치였습니다 !!";
 
         private GridPlayerController _playerController;
 
@@ -36,70 +41,126 @@ namespace CampusRun.Player
             // 장애물 태그 검사 (CompareTag로 GC 할당 차단)
             if (hitObject.CompareTag("Obstacle"))
             {
-                string reason = _defaultDeathReason;
-                string objectName = hitObject.name;
+                string obstacleType = IdentifyObstacleType(hitObject);
+                string reason = !string.IsNullOrEmpty(obstacleType) 
+                    ? string.Format(_deathMessageFormat, obstacleType) 
+                    : _defaultDeathReason;
 
-                bool isWater = objectName.Contains("Puddle") || objectName.Contains("Water");
-                bool isHeavyVehicle = objectName.Contains("Train") || objectName.Contains("Subway") || objectName.Contains("Motorcycle") || objectName.Contains("Bike") || objectName.Contains("Police");
-
-                if (isHeavyVehicle)
-                {
-                    reason = "[!] 캠퍼스 관통 지상철(경찰차)에 치였습니다!";
-                    ImpactVFXManager.PlayCrashDebris(transform.position);
-                    CameraShake.ShakeOnHeavyCrash();
-                }
-                else if (objectName.Contains("Student") || objectName.Contains("Late"))
-                {
-                    reason = "[!] 전력 질주하는 타과 지각생과 부딪혀 넘어졌습니다!";
-                    ImpactVFXManager.PlayCrashDebris(transform.position);
-                    CameraShake.ShakeOnCarCrash();
-                }
-                else if (isWater)
-                {
-                    reason = "[!] 거대 물웅덩이에 빠져 옷을 모두 버렸습니다!";
-                    ImpactVFXManager.PlayWaterSplash(transform.position);
-                    CameraShake.ShakeOnWaterSplash();
-                }
-                else if (objectName.Contains("Bus") || objectName.Contains("Shuttle"))
-                {
-                    reason = "[!] 1교시 셔틀버스를 피하지 못했습니다!";
-                    ImpactVFXManager.PlayCrashDebris(transform.position);
-                    CameraShake.ShakeOnHeavyCrash();
-                }
-                else if (objectName.Contains("Laser") || objectName.Contains("Professor"))
-                {
-                    reason = "[!] 교수님의 기습 출석체크 레이저에 걸렸습니다!";
-                    ImpactVFXManager.PlayCrashDebris(transform.position);
-                    CameraShake.ShakeOnCarCrash();
-                }
-                else if (objectName.Contains("Bomb") || objectName.Contains("Assignment"))
-                {
-                    reason = "[!] 하늘에서 떨어진 과제 폭탄에 맞았습니다!";
-                    ImpactVFXManager.PlayCrashDebris(transform.position);
-                    CameraShake.ShakeOnHeavyCrash();
-                }
-                else if (objectName.Contains("Freerider"))
-                {
-                    reason = "[!] 조별과제 프리라이더에게 붙잡혔습니다!";
-                    ImpactVFXManager.PlayCrashDebris(transform.position);
-                    CameraShake.ShakeOnCarCrash();
-                }
-                else if (objectName.Contains("Missile") || objectName.Contains("GradeF"))
-                {
-                    reason = "[!] 유도 F학점 미사일에 직격당했습니다!";
-                    ImpactVFXManager.PlayCrashDebris(transform.position);
-                    CameraShake.ShakeOnHeavyCrash();
-                }
-                else
-                {
-                    // 일반 차량 등 기본 충돌
-                    ImpactVFXManager.PlayCrashDebris(transform.position);
-                    CameraShake.ShakeOnCarCrash();
-                }
-
-                Debug.LogWarning($"[CampusRun] 충돌 발생! {reason}");
+                Debug.LogWarning($"[CampusRun] 충돌 발생! {reason} (충돌 오브젝트: {hitObject.name})");
                 _playerController.Die(reason);
             }
+        }
+
+        /// <summary>
+        /// 충돌한 오브젝트의 컴포넌트, 계층 구조, 모델명 등을 종합 분석하여 정확한 차량/장애물 명칭을 반환합니다.
+        /// (트럭, 승용차, 버스, 경찰차 등 사용자 지정 규격 완벽 대응)
+        /// </summary>
+        private string IdentifyObstacleType(GameObject hitObject)
+        {
+            // 1. MovingVehicle 컴포넌트 명시적 식별 (버스, 트럭, 승용차)
+            MovingVehicle movingVehicle = hitObject.GetComponentInParent<MovingVehicle>();
+            if (movingVehicle != null && !string.IsNullOrEmpty(movingVehicle.VehicleDisplayName))
+            {
+                return movingVehicle.VehicleDisplayName;
+            }
+
+            // 2. FastMotorcycle (초고속 질주 차량) 컴포넌트 명시적 식별
+            FastMotorcycle fastVehicle = hitObject.GetComponentInParent<FastMotorcycle>();
+            if (fastVehicle != null)
+            {
+                string fastNames = GetHierarchyNames(fastVehicle.gameObject).ToLower();
+                if (fastNames.Contains("police")) return "경찰차";
+                if (fastNames.Contains("scooter") || fastNames.Contains("motorcycle") || fastNames.Contains("bike")) return "오토바이";
+                if (fastNames.Contains("sport") || fastNames.Contains("car")) return "승용차";
+
+                if (!string.IsNullOrEmpty(fastVehicle.VehicleDisplayName))
+                {
+                    return fastVehicle.VehicleDisplayName;
+                }
+                return "경찰차";
+            }
+
+            // 3. StationaryObstacle (고정형 장애물) 컴포넌트 식별
+            StationaryObstacle stationary = hitObject.GetComponentInParent<StationaryObstacle>();
+            if (stationary != null && !string.IsNullOrEmpty(stationary.ObstacleName))
+            {
+                string sName = stationary.ObstacleName.ToLower();
+                if (sName.Contains("킥보드") || sName.Contains("kickboard")) return "킥보드";
+                if (sName.Contains("볼라드") || sName.Contains("bollard")) return "볼라드";
+                return stationary.ObstacleName;
+            }
+
+            // 4. 오브젝트 이름 및 계층 구조(부모, 자식) 텍스트 정밀 분석 (대소문자 무관)
+            string hierarchyNames = GetHierarchyNames(hitObject).ToLower();
+
+            // [경찰차] 최우선 판정: Police Car 모델이 PF_Motorcycle에 배치되어 있으므로 오토바이보다 먼저 검사!
+            if (hierarchyNames.Contains("police"))
+            {
+                return "경찰차";
+            }
+
+            // [트럭] 1톤 탑차 / 택배 트럭
+            if (hierarchyNames.Contains("truck") || hierarchyNames.Contains("delivery"))
+            {
+                return "트럭";
+            }
+
+            // [버스] 셔틀버스
+            if (hierarchyNames.Contains("bus") || hierarchyNames.Contains("shuttle"))
+            {
+                return "버스";
+            }
+
+            // [승용차] 세단, 택시, 일반 승용차
+            if (hierarchyNames.Contains("sedan") || hierarchyNames.Contains("taxi") || hierarchyNames.Contains("car") || hierarchyNames.Contains("sport"))
+            {
+                return "승용차";
+            }
+
+            // [오토바이]
+            if (hierarchyNames.Contains("motorcycle") || hierarchyNames.Contains("scooter") || hierarchyNames.Contains("bike"))
+            {
+                return "오토바이";
+            }
+
+            // [기타 고정 장애물]
+            if (hierarchyNames.Contains("kickboard") || hierarchyNames.Contains("킥보드"))
+            {
+                return "킥보드";
+            }
+
+            if (hierarchyNames.Contains("bollard") || hierarchyNames.Contains("볼라드"))
+            {
+                return "볼라드";
+            }
+
+            return "장애물";
+        }
+
+        private string GetHierarchyNames(GameObject obj)
+        {
+            if (obj == null) return string.Empty;
+
+            string names = obj.name;
+            Transform root = obj.transform.root;
+            if (root != null && root != obj.transform)
+            {
+                names += " " + root.name;
+            }
+
+            Transform parent = obj.transform.parent;
+            if (parent != null && parent != root)
+            {
+                names += " " + parent.name;
+            }
+
+            // 직계 자식들 이름도 포함
+            for (int i = 0; i < obj.transform.childCount; i++)
+            {
+                names += " " + obj.transform.GetChild(i).name;
+            }
+
+            return names;
         }
     }
 }

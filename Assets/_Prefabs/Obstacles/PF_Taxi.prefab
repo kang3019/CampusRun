@@ -67,6 +67,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: be44e9896fc86a7479c4343305b7bea2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CampusRun.Obstacles.MovingVehicle
+  _vehicleDisplayName: 승용차
   _direction: 1
   _speed: 11.5
   _despawnBoundaryX: 28

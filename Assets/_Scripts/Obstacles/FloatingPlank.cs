@@ -18,10 +18,15 @@ namespace CampusRun.Obstacles
         [Tooltip("널판지의 길이(X축 크기)")]
         [SerializeField] private float _plankLength = 2.2f;
 
+        [Tooltip("통나무 윗면 탑승 표면 높이 오프셋 (캐릭터가 끼지 않고 위에 올라타도록 설정)")]
+        [SerializeField] private float _surfaceHeightOffset = 0.18f;
+
         private float _direction = 1f; // +1: 오른쪽, -1: 왼쪽
         private float _speed = 3.5f;
         private Action<FloatingPlank> _onDespawn;
         private bool _isInitialized = false;
+        private float _baseY = 0.15f;
+        private float _bobbingPhase = 0f;
 
         // 현재 널판지 위에 탑승한 플레이어
         private GridPlayerController _mountedPlayer;
@@ -29,6 +34,7 @@ namespace CampusRun.Obstacles
         public float Speed => _speed;
         public float Direction => _direction;
         public float PlankLength => _plankLength;
+        public float TopSurfaceY => transform.position.y + _surfaceHeightOffset;
 
         /// <summary>
         /// 레인에서 풀을 통해 꺼낼 때 방향과 속도를 지정하여 초기화합니다.
@@ -39,6 +45,8 @@ namespace CampusRun.Obstacles
             _speed = speed;
             _onDespawn = onDespawn;
             _mountedPlayer = null;
+            _baseY = transform.position.y;
+            _bobbingPhase = UnityEngine.Random.Range(0f, Mathf.PI * 2f);
             _isInitialized = true;
             gameObject.SetActive(true);
         }
@@ -49,12 +57,18 @@ namespace CampusRun.Obstacles
 
             // X축으로 지속 이동
             float moveDelta = _direction * _speed * Time.deltaTime;
-            transform.position += new Vector3(moveDelta, 0f, 0f);
 
-            // 탑승 중인 플레이어가 있다면 동일한 이동량만큼 함께 이동(표류)
+            // 물결에 따른 통나무 미세 부유(Bobbing) 및 롤링 연출
+            float bobbingOffset = Mathf.Sin(Time.time * 2.2f + _bobbingPhase) * 0.015f;
+            float rollAngle = Mathf.Cos(Time.time * 1.8f + _bobbingPhase) * 1.2f;
+
+            transform.position = new Vector3(transform.position.x + moveDelta, _baseY + bobbingOffset, transform.position.z);
+            transform.localRotation = Quaternion.Euler(0f, 0f, rollAngle);
+
+            // 탑승 중인 플레이어가 있다면 동일한 이동량만큼 함께 이동(표류)하며 통나무 윗면에 정확히 위치
             if (_mountedPlayer != null && _mountedPlayer.IsAlive)
             {
-                _mountedPlayer.ApplyPlankDrift(moveDelta);
+                _mountedPlayer.ApplyPlankDrift(moveDelta, TopSurfaceY);
             }
 
             // 소멸 경계 도달 검사
