@@ -37,6 +37,7 @@ namespace CampusRun.Leaderboard
         private Action _onInputCompletedCallback;
 
         private Font _pixelFont;
+        private Text _guideText;
         private bool _isInitialized = false;
         private bool _isSubmitting = false;
 
@@ -53,6 +54,27 @@ namespace CampusRun.Leaderboard
         private void Start()
         {
             EnsureUI();
+            if (LeaderboardManager.Instance != null)
+            {
+                LeaderboardManager.Instance.OnLeaderboardUpdated -= HandleLeaderboardUpdated;
+                LeaderboardManager.Instance.OnLeaderboardUpdated += HandleLeaderboardUpdated;
+            }
+        }
+
+        private void OnDestroy()
+        {
+            if (LeaderboardManager.Instance != null)
+            {
+                LeaderboardManager.Instance.OnLeaderboardUpdated -= HandleLeaderboardUpdated;
+            }
+        }
+
+        private void HandleLeaderboardUpdated()
+        {
+            if (_isInitialized)
+            {
+                RefreshLeaderboardRows();
+            }
         }
 
         private void Update()
@@ -254,6 +276,7 @@ namespace CampusRun.Leaderboard
             guideText.alignment = TextAnchor.MiddleCenter;
             guideText.color = new Color(0.7f, 0.7f, 0.7f, 0.8f);
             guideText.text = "단축키: Tab 또는 L 키로 랭킹 열기 / Esc 키로 닫기";
+            _guideText = guideText;
 
             _leaderboardModal = dimObj;
             _leaderboardModal.SetActive(false);
@@ -482,6 +505,12 @@ namespace CampusRun.Leaderboard
             {
                 _leaderboardModal.SetActive(true);
             }
+
+            // Firebase가 설정되어 있다면 열릴 때 최신 서버 데이터를 비동기로 동기화
+            if (LeaderboardManager.Instance != null && LeaderboardManager.Instance.IsFirebaseConfigured)
+            {
+                LeaderboardManager.Instance.RefreshFromFirebase();
+            }
         }
 
         /// <summary>
@@ -516,8 +545,24 @@ namespace CampusRun.Leaderboard
         /// </summary>
         public void RefreshLeaderboardRows()
         {
-            var entries = LeaderboardManager.Instance?.GetEntries();
+            var manager = LeaderboardManager.Instance;
+            var entries = manager?.GetEntries();
             if (entries == null) return;
+
+            if (_guideText != null)
+            {
+                if (manager.IsFirebaseConfigured)
+                {
+                    string syncStatus = manager.IsFirebaseConnected
+                        ? "<color=#4ADE80>● FIREBASE 실시간 연동됨</color>"
+                        : "<color=#FACC15>● FIREBASE 동기화 대기/오프라인</color>";
+                    _guideText.text = $"단축키: Tab/L 열기 | Esc 닫기   ({syncStatus})";
+                }
+                else
+                {
+                    _guideText.text = "단축키: Tab 또는 L 키로 랭킹 열기 / Esc 키로 닫기";
+                }
+            }
 
             Color gold = new Color(1f, 0.84f, 0f);
             Color silver = new Color(0.85f, 0.88f, 0.95f);
