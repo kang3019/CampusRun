@@ -28,19 +28,19 @@ namespace CampusRun.Obstacles
         [SerializeField] private float _despawnBoundaryX = 28.0f;
 
         [Header("--- 경적(클락션) 설정 ---")]
-        [Tooltip("플레이어가 바로 앞뒤 레인에 있을 때 경적을 울릴 확률 (기본 0.10 = 10%)")]
+        [Tooltip("플레이어가 앞뒤 시야(Z축 5.5m 이내)에 있을 때 경적을 울릴 확률 (기본 0.22 = 22%, 약 4~5대 중 1대꼴)")]
         [Range(0f, 1f)]
-        [SerializeField] private float _honkChance = 0.10f;
+        [SerializeField] private float _honkChance = 0.22f;
 
-        [Tooltip("경적 소리 볼륨 (기존 1.0 -> 0.45로 대폭 완화)")]
+        [Tooltip("경적 소리 볼륨 (기본 0.65, 엔진음 위로 명확히 들리도록 보정)")]
         [Range(0f, 1f)]
-        [SerializeField] private float _honkVolume = 0.45f;
+        [SerializeField] private float _honkVolume = 0.65f;
 
-        [Tooltip("플레이어와 Z축(레인) 거리가 이 값 이내일 때만 경적 발생 (단위: m, 기본 2.5m = 앞뒤 2칸)")]
-        [SerializeField] private float _honkTriggerZDistance = 2.5f;
+        [Tooltip("플레이어와 Z축(레인) 거리가 이 값 이내일 때만 경적 발생 (단위: m, 기본 5.5m = 시야 내 도로)")]
+        [SerializeField] private float _honkTriggerZDistance = 5.5f;
 
         [Tooltip("전체 차량 경적 전역 최소 쿨다운 (초, 연속 소음 방지)")]
-        [SerializeField] private float _honkGlobalCooldown = 4.0f;
+        [SerializeField] private float _honkGlobalCooldown = 2.5f;
 
         // 전역 경적 쿨다운 관리 (GC 할당 0)
         private static float s_nextGlobalHonkTime = 0f;
@@ -130,15 +130,15 @@ namespace CampusRun.Obstacles
             // X축 방향으로 등속 직선 이동 (월드 좌표 기준)
             transform.position += new Vector3(_direction * _speed * Time.deltaTime, 0f, 0f);
 
-            // 플레이어 바로 앞뒤 레인에 있고, 코앞 도로 중심(X=0 부근)을 지날 때 엄격한 쿨다운과 낮은 확률(10%)로 경적
+            // 도로 중심(X=0 부근)을 지날 때 조건부 경적 (적절한 빈도와 볼륨 보장)
             if (!_hasHonked && Mathf.Abs(transform.position.x) < 4.0f)
             {
                 _hasHonked = true;
 
-                // 1. 전체 차량 경적 쿨다운 체크 (최소 4초 동안 다른 차는 절대 경적 금지)
+                // 1. 전체 차량 경적 쿨다운 체크 (최소 2.5초 간격 유지)
                 if (Time.time >= s_nextGlobalHonkTime)
                 {
-                    // 2. 플레이어 Z축(레인) 근접 여부 체크 (플레이어와 멀리 떨어진 레인의 차는 경적 금지)
+                    // 2. 플레이어 Z축(레인) 근접 여부 체크 (플레이어 시야 내 5.5m 이내 도로)
                     Vector3 playerPos = GridPlayerController.Instance != null
                         ? GridPlayerController.Instance.transform.position
                         : (Camera.main != null ? Camera.main.transform.position : Vector3.zero);
@@ -146,18 +146,21 @@ namespace CampusRun.Obstacles
                     float zDiff = Mathf.Abs(transform.position.z - playerPos.z);
                     if (zDiff <= _honkTriggerZDistance)
                     {
-                        // 3. 10%의 낮은 확률 검사
+                        // 3. 약 22%의 밸런스 있는 확률 검사 (너무 시끄럽지 않고 가끔씩 빵!)
                         if (UnityEngine.Random.value < _honkChance)
                         {
                             s_nextGlobalHonkTime = Time.time + _honkGlobalCooldown;
 
                             var audioMgr = AudioManager.Instance;
                             AudioClip klaxonClip = audioMgr != null ? audioMgr.CarKlaxonClip : null;
+                            if (klaxonClip == null)
+                            {
+                                klaxonClip = Resources.Load<AudioClip>("SFX/car_klaxon");
+                            }
+
                             if (klaxonClip != null && _audioSource != null && _audioSource.isActiveAndEnabled)
                             {
-                                float finalVol = _honkVolume;
-                                if (audioMgr != null) finalVol *= audioMgr.CarKlaxonVolume;
-                                _audioSource.PlayOneShot(klaxonClip, finalVol);
+                                _audioSource.PlayOneShot(klaxonClip, _honkVolume);
                             }
                         }
                     }
