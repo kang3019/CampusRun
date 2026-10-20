@@ -1,5 +1,6 @@
 using UnityEngine;
 using CampusRun.Core;
+using CampusRun.Effects;
 
 namespace CampusRun.Player
 {
@@ -207,6 +208,12 @@ namespace CampusRun.Player
             Vector3 targetPosition = new Vector3(targetX, 0f, _currentBaseZ) + _offset;
             transform.position = Vector3.SmoothDamp(transform.position, targetPosition, ref _currentVelocity, _smoothTime);
 
+            // 카메라 쉐이크 오프셋 반영 (충돌 및 물 빠짐 시 진동)
+            if (CameraShake.Instance != null)
+            {
+                transform.position += CameraShake.Instance.ShakeOffset;
+            }
+
             // [중요] 매 프레임 LookAt 호출 시 회전이 뒤틀리는 현상을 없애고, 안정적인 고정 각도 유지
             ApplyFixedRotation();
 
@@ -221,7 +228,7 @@ namespace CampusRun.Player
             // 카메라의 기준 진행도보다 플레이어가 화면 아래로 너무 많이 밀려났을 때
             if (_target.position.z < _currentBaseZ - _deathBehindThreshold)
             {
-                string reason = "🦅 교수님의 매의 눈: 1교시 지각으로 F학점을 받았습니다!";
+                string reason = "[!] 교수님의 매의 눈: 1교시 지각으로 F학점을 받았습니다!";
                 Debug.LogWarning($"[CampusRun] {reason} (기준 진행도: {_currentBaseZ:F1}m, 플레이어 위치: {_target.position.z:F1}m)");
                 _playerController.Die(reason);
             }

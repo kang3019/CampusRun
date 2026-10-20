@@ -4,6 +4,7 @@ using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 using UnityEngine.EventSystems;
 using CampusRun.Core;
+using CampusRun.Leaderboard;
 
 namespace CampusRun.UI
 {
@@ -132,8 +133,12 @@ namespace CampusRun.UI
         {
             if (FindAnyObjectByType<InGameUIManager>() == null)
             {
-                GameObject uiManagerObj = new GameObject("[InGameUIManager]");
-                uiManagerObj.AddComponent<InGameUIManager>();
+                // 씬에 플레이어 컨트롤러가 있는 실제 게임 씬에서만 자동 생성 (빈 씬에서의 오작동 방지)
+                if (FindAnyObjectByType<CampusRun.Player.GridPlayerController>() != null)
+                {
+                    GameObject uiManagerObj = new GameObject("[InGameUIManager]");
+                    uiManagerObj.AddComponent<InGameUIManager>();
+                }
             }
         }
 
@@ -143,7 +148,14 @@ namespace CampusRun.UI
             Application.targetFrameRate = 60;
             QualitySettings.vSyncCount = 1;
 
+            // 16:9 해상도 (1920x1080) 보장
+            if (!Application.isEditor)
+            {
+                Screen.SetResolution(1920, 1080, FullScreenMode.FullScreenWindow);
+            }
+
             EnsureEventSystem();
+            EnsureLeaderboardUI();
             EnsureHUDAndGameOverUI();
             SetupScoreHUDPosition();
             ApplyFixedScale();
@@ -278,6 +290,12 @@ namespace CampusRun.UI
             // 3. 게임오버 시 키보드 R키, 스페이스바, 엔터키로 즉시 다시하기
             if (_isGameOver)
             {
+                // 이름 입력 팝업이나 랭킹 모달이 열려 있는 동안은 단축키 오작동 방지
+                if (LeaderboardUI.Instance != null && (LeaderboardUI.Instance.IsInputModalActive || LeaderboardUI.Instance.IsLeaderboardActive))
+                {
+                    return;
+                }
+
                 if (keyboard.rKey.wasPressedThisFrame || keyboard.spaceKey.wasPressedThisFrame || keyboard.enterKey.wasPressedThisFrame)
                 {
                     OnRetryButtonClicked();
@@ -429,7 +447,7 @@ namespace CampusRun.UI
                 _warningBannerText.fontStyle = FontStyle.Bold;
                 _warningBannerText.color = new Color(1f, 0.35f, 0.1f);
                 _warningBannerText.alignment = TextAnchor.MiddleCenter;
-                _warningBannerText.text = "⚠️ 지각 위기! 교수님이 다가옵니다!";
+                _warningBannerText.text = "[!] 지각 위기! 교수님이 다가옵니다!";
 
                 Shadow bannerShadow = bannerObj.AddComponent<Shadow>();
                 bannerShadow.effectColor = new Color(0f, 0f, 0f, 0.9f);
@@ -538,15 +556,13 @@ namespace CampusRun.UI
                 _highScoreText.alignment = TextAnchor.MiddleCenter;
                 _highScoreText.text = "최고 기록: 0m";
 
-                // [다시 하기 버튼]
+                // [다시 하기 버튼] (좌측)
                 GameObject btnObj = new GameObject("Retry_Button");
                 btnObj.transform.SetParent(boxObj.transform, false);
                 RectTransform btnRect = btnObj.AddComponent<RectTransform>();
-                btnRect.anchoredPosition = new Vector2(0f, -155f);
-                btnRect.sizeDelta = new Vector2(300f, 70f);
-
-                // 스케일 0.9 고정
-                btnObj.transform.localScale = new Vector3(0.9f, 0.9f, 0.9f);
+                btnRect.anchoredPosition = new Vector2(-130f, -155f);
+                btnRect.sizeDelta = new Vector2(230f, 65f);
+                btnObj.transform.localScale = Vector3.one;
 
                 Image btnImg = btnObj.AddComponent<Image>();
                 btnImg.color = new Color(0.18f, 0.78f, 0.38f); // 상쾌하고 또렷한 에메랄드 그린
@@ -567,11 +583,48 @@ namespace CampusRun.UI
                 btnTextRect.sizeDelta = btnRect.sizeDelta;
                 Text btnText = btnTextObj.AddComponent<Text>();
                 btnText.font = defaultFont;
-                btnText.fontSize = 30;
+                btnText.fontSize = 24;
                 btnText.fontStyle = FontStyle.Bold;
                 btnText.color = Color.white;
                 btnText.alignment = TextAnchor.MiddleCenter;
                 btnText.text = "다시 하기 (R)";
+
+                // [🏆 랭킹 보기 버튼] (우측)
+                GameObject rankBtnObj = new GameObject("Leaderboard_Button");
+                rankBtnObj.transform.SetParent(boxObj.transform, false);
+                RectTransform rankBtnRect = rankBtnObj.AddComponent<RectTransform>();
+                rankBtnRect.anchoredPosition = new Vector2(130f, -155f);
+                rankBtnRect.sizeDelta = new Vector2(230f, 65f);
+                rankBtnObj.transform.localScale = Vector3.one;
+
+                Image rankBtnImg = rankBtnObj.AddComponent<Image>();
+                rankBtnImg.color = new Color(0.95f, 0.65f, 0.15f); // 골드 오렌지
+
+                Button rankBtn = rankBtnObj.AddComponent<Button>();
+                ColorBlock rankColors = rankBtn.colors;
+                rankColors.highlightedColor = new Color(1f, 0.75f, 0.25f);
+                rankColors.pressedColor = new Color(0.85f, 0.55f, 0.1f);
+                rankBtn.colors = rankColors;
+                rankBtn.onClick.AddListener(() =>
+                {
+                    LeaderboardUI.Instance?.OpenLeaderboard();
+                });
+
+                Shadow rankBtnShadow = rankBtnObj.AddComponent<Shadow>();
+                rankBtnShadow.effectColor = new Color(0f, 0f, 0f, 0.4f);
+                rankBtnShadow.effectDistance = new Vector2(2f, -2f);
+
+                GameObject rankBtnTextObj = new GameObject("Button_Text");
+                rankBtnTextObj.transform.SetParent(rankBtnObj.transform, false);
+                RectTransform rankBtnTextRect = rankBtnTextObj.AddComponent<RectTransform>();
+                rankBtnTextRect.sizeDelta = rankBtnRect.sizeDelta;
+                Text rankBtnText = rankBtnTextObj.AddComponent<Text>();
+                rankBtnText.font = defaultFont;
+                rankBtnText.fontSize = 24;
+                rankBtnText.fontStyle = FontStyle.Bold;
+                rankBtnText.color = Color.white;
+                rankBtnText.alignment = TextAnchor.MiddleCenter;
+                rankBtnText.text = "★ 랭킹 (Tab)";
 
                 _gameOverPanel.SetActive(false);
             }
@@ -612,8 +665,8 @@ namespace CampusRun.UI
             panelRect.anchorMax = new Vector2(0.5f, 0.5f);
             panelRect.pivot = new Vector2(0.5f, 0.5f);
             panelRect.anchoredPosition = new Vector2(0f, 40f);
-            panelRect.sizeDelta = new Vector2(900f, 500f);
-            titlePanelObj.transform.localScale = new Vector3(0.9f, 0.9f, 0.9f);
+            panelRect.sizeDelta = new Vector2(900f, 540f);
+            titlePanelObj.transform.localScale = Vector3.one;
 
             _titleScreenPanel = titlePanelObj;
 
@@ -629,7 +682,7 @@ namespace CampusRun.UI
             badgeText.fontStyle = FontStyle.Bold;
             badgeText.color = new Color(1f, 0.72f, 0.22f); // 따뜻한 골드 오렌지
             badgeText.alignment = TextAnchor.MiddleCenter;
-            badgeText.text = "⚡ CAMPUS SURVIVAL RUN ⚡";
+            badgeText.text = "★ CAMPUS SURVIVAL RUN ★";
             Shadow badgeShadow = badgeObj.AddComponent<Shadow>();
             badgeShadow.effectColor = new Color(0f, 0f, 0f, 0.9f);
             badgeShadow.effectDistance = new Vector2(2f, -2f);
@@ -709,6 +762,42 @@ namespace CampusRun.UI
             _keyGuideText.color = new Color(0.85f, 0.90f, 0.95f, 0.9f);
             _keyGuideText.alignment = TextAnchor.MiddleCenter;
             _keyGuideText.text = "[ ↑ / W ] 전진     [ ← / A ] 좌측     [ → / D ] 우측     [ ↓ / S ] 후퇴";
+
+            // 5. ★ TOP 5 랭킹 버튼 (타이틀 화면 하단)
+            GameObject titleRankBtnObj = new GameObject("TitleLeaderboard_Button");
+            titleRankBtnObj.transform.SetParent(titlePanelObj.transform, false);
+            RectTransform titleRankBtnRect = titleRankBtnObj.AddComponent<RectTransform>();
+            titleRankBtnRect.anchoredPosition = new Vector2(0f, -185f);
+            titleRankBtnRect.sizeDelta = new Vector2(280f, 52f);
+
+            Image titleRankImg = titleRankBtnObj.AddComponent<Image>();
+            titleRankImg.color = new Color(0.14f, 0.18f, 0.28f, 0.95f);
+
+            Outline titleRankOutline = titleRankBtnObj.AddComponent<Outline>();
+            titleRankOutline.effectColor = new Color(1f, 0.82f, 0.2f, 0.9f);
+            titleRankOutline.effectDistance = new Vector2(2f, -2f);
+
+            Button titleRankBtn = titleRankBtnObj.AddComponent<Button>();
+            ColorBlock titleColors = titleRankBtn.colors;
+            titleColors.highlightedColor = new Color(0.25f, 0.32f, 0.48f);
+            titleColors.pressedColor = new Color(0.10f, 0.12f, 0.20f);
+            titleRankBtn.colors = titleColors;
+            titleRankBtn.onClick.AddListener(() =>
+            {
+                LeaderboardUI.Instance?.OpenLeaderboard();
+            });
+
+            GameObject titleRankTextObj = new GameObject("Text");
+            titleRankTextObj.transform.SetParent(titleRankBtnObj.transform, false);
+            RectTransform titleRankTextRect = titleRankTextObj.AddComponent<RectTransform>();
+            titleRankTextRect.sizeDelta = titleRankBtnRect.sizeDelta;
+            Text titleRankText = titleRankTextObj.AddComponent<Text>();
+            titleRankText.font = defaultFont;
+            titleRankText.fontSize = 22;
+            titleRankText.fontStyle = FontStyle.Bold;
+            titleRankText.color = new Color(1f, 0.85f, 0.2f);
+            titleRankText.alignment = TextAnchor.MiddleCenter;
+            titleRankText.text = "★ TOP 5 랭킹 (Tab)";
         }
 
         /// <summary>
@@ -855,11 +944,11 @@ namespace CampusRun.UI
         }
 
         /// <summary>
-        /// 점수 HUD, 게임오버 대화상자 박스, 다시하기 버튼 및 설정 버튼/창의 스케일을 0.9로 정밀하게 고정합니다.
+        /// 점수 HUD, 게임오버 대화상자 박스, 다시하기 버튼 및 설정 버튼/창의 스케일을 1배(Vector3.one)로 정밀하게 고정합니다.
         /// </summary>
         public void ApplyFixedScale()
         {
-            Vector3 fixedScale = new Vector3(0.9f, 0.9f, 0.9f);
+            Vector3 fixedScale = Vector3.one;
 
             if (_scoreText != null)
             {
@@ -960,11 +1049,11 @@ namespace CampusRun.UI
 
             if (remainingSeconds <= 1.0f)
             {
-                _warningBannerText.text = $"🚨 출석 마감 직전! ({remainingSeconds:0.0}초)";
+                _warningBannerText.text = $"[!!] 출석 마감 직전! ({remainingSeconds:0.0}초)";
             }
             else
             {
-                _warningBannerText.text = $"⚠️ 지각 위기! 교수님이 다가옵니다! ({remainingSeconds:0.0}초)";
+                _warningBannerText.text = $"[!] 지각 위기! 교수님이 다가옵니다! ({remainingSeconds:0.0}초)";
             }
         }
 
@@ -1043,14 +1132,52 @@ namespace CampusRun.UI
             }
 
             // 3. 대학생 학점 등급 판정 및 컬러링 연출
+            string grade = "학점: F";
             if (_gradeBadgeText != null)
             {
-                string grade = EvaluateGrade(finalScore, out Color gradeColor);
+                grade = EvaluateGrade(finalScore, out Color gradeColor);
                 _gradeBadgeText.text = grade;
                 _gradeBadgeText.color = gradeColor;
             }
 
-            _gameOverPanel.SetActive(true);
+            // 4. 로컬 TOP 5 랭킹 검사 및 신기록 등록 팝업 트리거
+            string simpleGrade = GetSimpleGrade(finalScore);
+            if (LeaderboardManager.Instance != null && LeaderboardManager.Instance.IsTop5(finalScore))
+            {
+                LeaderboardUI.Instance?.PromptNameInput(finalScore, simpleGrade, () =>
+                {
+                    if (_gameOverPanel != null) _gameOverPanel.SetActive(true);
+                });
+            }
+            else
+            {
+                _gameOverPanel.SetActive(true);
+            }
+        }
+
+        /// <summary>
+        /// 씬에 LeaderboardUI 컴포넌트가 없으면 안전하게 자동 생성합니다.
+        /// </summary>
+        private void EnsureLeaderboardUI()
+        {
+            if (FindAnyObjectByType<LeaderboardUI>() == null)
+            {
+                GameObject lbObj = new GameObject("[LeaderboardUI]");
+                lbObj.AddComponent<LeaderboardUI>();
+            }
+        }
+
+        /// <summary>
+        /// 점수에 따른 단순 학점 문자열을 반환합니다.
+        /// </summary>
+        public static string GetSimpleGrade(int score)
+        {
+            if (score >= 500) return "A+";
+            if (score >= 400) return "A0";
+            if (score >= 300) return "B+";
+            if (score >= 200) return "B0";
+            if (score >= 100) return "C+";
+            return "F";
         }
 
         /// <summary>
@@ -1093,6 +1220,9 @@ namespace CampusRun.UI
         {
             _isGameOver = false;
             HandleInactivityWarning(false);
+            AudioListener.pause = false;
+            AudioListener.volume = 1.0f;
+            CampusRun.Core.MonoSingleton<CampusRun.Audio.AudioManager>.ResetShutdownFlag();
             GameEvents.ClearAllSubscriptions();
             SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
         }
