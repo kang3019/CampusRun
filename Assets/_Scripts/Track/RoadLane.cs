@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Pool;
 using CampusRun.Obstacles;
+using CampusRun.Audio;
 
 namespace CampusRun.Track
 {

@@ -4,6 +4,7 @@ using UnityEngine.InputSystem;
 using CampusRun.Core;
 using CampusRun.Obstacles;
 using CampusRun.Track;
+using CampusRun.Audio;
 using CampusRun.Effects;
 
 namespace CampusRun.Player
@@ -126,6 +127,9 @@ namespace CampusRun.Player
             _currentGridX = Mathf.RoundToInt(transform.position.x / _gridSize);
             _currentGridZ = Mathf.RoundToInt(transform.position.z / _gridSize);
             transform.position = new Vector3(_currentGridX * _gridSize, _groundSurfaceY, _currentGridZ * _gridSize);
+
+            // 오디오 매니저 기동 (씬에 프리팹이 없더라도 자동 기동)
+            _ = AudioManager.Instance;
         }
 
         private void OnEnable()
@@ -136,7 +140,7 @@ namespace CampusRun.Player
 
         private void OnDisable()
         {
-            GameEvents.OnGameStateChanged += HandleGameStateChanged;
+            GameEvents.OnGameStateChanged -= HandleGameStateChanged;
             GameEvents.OnGameRestarted -= ResetPlayer;
         }
 
@@ -438,6 +442,7 @@ namespace CampusRun.Player
             }
 
             GameEvents.TriggerPlayerGridMoved(new Vector3Int(_currentGridX, 0, _currentGridZ));
+            GameEvents.TriggerPlayerHopStarted(new Vector3Int(_currentGridX, 0, _currentGridZ));
 
             // 점프 코루틴 실행
             if (_hopCoroutine != null) StopCoroutine(_hopCoroutine);
@@ -642,6 +647,7 @@ namespace CampusRun.Player
             {
                 _currentMountedPlank = foundPlank;
                 _currentMountedPlank.MountPlayer(this);
+                AudioManager.Instance.PlayWoodPlankSound();
                 transform.position = new Vector3(transform.position.x, foundPlank.TopSurfaceY, transform.position.z);
                 return;
             }

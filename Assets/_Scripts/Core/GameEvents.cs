@@ -54,6 +54,9 @@ namespace CampusRun.Core
         /// <summary> 플레이어가 앞으로 1칸 전진(Hop)했을 때 발생합니다. (매개변수: 도달한 그리드 Z 좌표) </summary>
         public static event Action<int> OnPlayerHopped;
 
+        /// <summary> 플레이어가 1칸 도약(Hop)을 시작했을 때 발생합니다. (매개변수: 목표 격자 좌표) </summary>
+        public static event Action<Vector3Int> OnPlayerHopStarted;
+
         /// <summary> 플레이어의 이산 그리드 좌표가 변경되었을 때 발생합니다. (X, Y, Z) </summary>
         public static event Action<Vector3Int> OnPlayerGridMoved;
 
@@ -67,6 +70,7 @@ namespace CampusRun.Core
         public static event Action<float, float> OnInactivityTimerUpdated;
 
         public static void TriggerPlayerHopped(int playerGridZ) => OnPlayerHopped?.Invoke(playerGridZ);
+        public static void TriggerPlayerHopStarted(Vector3Int targetGrid) => OnPlayerHopStarted?.Invoke(targetGrid);
         public static void TriggerPlayerGridMoved(Vector3Int newGridPos) => OnPlayerGridMoved?.Invoke(newGridPos);
         public static void TriggerPlayerDied(string deathReason, int finalDistance) => OnPlayerDied?.Invoke(deathReason, finalDistance);
         public static void TriggerInactivityWarning(bool isWarning) => OnInactivityWarning?.Invoke(isWarning);
@@ -116,6 +120,7 @@ namespace CampusRun.Core
             OnGameRestarted = null;
 
             OnPlayerHopped = null;
+            OnPlayerHopStarted = null;
             OnPlayerGridMoved = null;
             OnPlayerDied = null;
             OnInactivityWarning = null;
