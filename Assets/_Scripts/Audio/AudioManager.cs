@@ -64,10 +64,15 @@ namespace CampusRun.Audio
         [Tooltip("차량 충돌 급브레이크 및 쾅 충격음 (carbreak.wav)")]
         [SerializeField] private AudioClip _customCarBreakClip;
 
+        [Tooltip("차량 충돌 급브레이크 볼륨 (0.0 ~ 2.0)")]
+        [Range(0f, 2f)]
+        [SerializeField] private float _carBreakVolume = 1.35f;
+
         [Tooltip("차량/장애물 충돌 사운드")]
         [SerializeField] private AudioClip _customHitClip;
 
         public AudioClip CarBreakClip => _customCarBreakClip;
+        public float CarBreakVolume => _carBreakVolume;
 
         [Tooltip("물에 빠짐(익사) 사운드")]
         [SerializeField] private AudioClip _customSplashClip;
@@ -373,13 +378,18 @@ namespace CampusRun.Audio
 
         /// <summary>
         /// 차량(승용차, 트럭, 버스, 경찰차 등)과 충돌 시 '끼이익! 쾅!!' 급제동 및 충돌음(carbreak.wav)을 재생합니다.
+        /// 더블 임팩트 레이어링 기법을 적용하여 찢어짐 없이 묵직하고 시원한 음압으로 출력합니다.
         /// </summary>
         public void PlayCarBreakSound()
         {
             AudioClip clip = _customCarBreakClip != null ? _customCarBreakClip : Resources.Load<AudioClip>("SFX/carbreak");
             if (clip != null)
             {
-                PlaySFX(clip, 1.0f, Random.Range(0.96f, 1.04f));
+                float basePitch = Random.Range(0.98f, 1.02f);
+                // 주 채널 (선명한 끼이익 스키드마크 사운드)
+                PlaySFX(clip, 1.25f * _carBreakVolume, basePitch);
+                // 서브 채널 (쾅! 충격음 중저음 보강 및 볼륨 증폭 레이어링)
+                PlaySFX(clip, 0.85f * _carBreakVolume, basePitch * 0.95f);
             }
             else
             {
@@ -440,7 +450,7 @@ namespace CampusRun.Audio
 
             source.pitch = pitch;
             source.spatialBlend = 0f; // 2D 균일 청취 보장
-            float finalVolume = Mathf.Clamp01(volume * _sfxVolume * _masterVolume);
+            float finalVolume = Mathf.Clamp(volume * _sfxVolume * _masterVolume, 0f, 1.5f);
             source.PlayOneShot(clip, finalVolume);
         }
 
