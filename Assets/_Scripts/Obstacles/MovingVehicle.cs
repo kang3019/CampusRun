@@ -10,6 +10,12 @@ namespace CampusRun.Obstacles
     /// </summary>
     public class MovingVehicle : MonoBehaviour
     {
+        [Header("--- 차량 식별 ---")]
+        [Tooltip("사망 메시지에 표시될 차량 명칭 (예: 버스, 트럭, 승용차)")]
+        [SerializeField] private string _vehicleDisplayName = "승용차";
+
+        public string VehicleDisplayName => _vehicleDisplayName;
+
         [Header("--- 이동 속성 ---")]
         [Tooltip("이동 방향 (+1: 오른쪽, -1: 왼쪽)")]
         [SerializeField] private float _direction = 1f;

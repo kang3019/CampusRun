@@ -34,16 +34,15 @@ namespace CampusRun.Track
         [Tooltip("스폰 시작 X축 좌표 (도로 폭 60m 기준 ±26.0m)")]
         [SerializeField] private float _spawnBoundaryX = 26.0f;
 
-        [Header("--- 횡단보도 및 도로 표식 설정 ---")]
-        [Tooltip("횡단보도 장식 그룹 (지브라 스트라이프 + 정지선)")]
-        [SerializeField] private GameObject _crosswalkGroup;
+        [Header("--- 일자 페인트 패턴 설정 ---")]
+        [Tooltip("도로에 등장할 수 있는 다양한 일자 점선 패턴 그룹 목록 (통일된 일자 페인트)")]
+        [SerializeField] private GameObject[] _dashPatternGroups;
 
-        [Tooltip("일반 도로 점선 차선 그룹")]
+        [Tooltip("일반 도로 기본 일자 점선 그룹 (하위 호환용)")]
         [SerializeField] private GameObject _standardDashesGroup;
 
-        [Tooltip("이 도로에 횡단보도가 등장할 확률 (기본 0.25 = 25% 확률)")]
-        [Range(0f, 1f)]
-        [SerializeField] private float _crosswalkChance = 0.25f;
+        [Tooltip("구버전 횡단보도 그룹 (영구 비활성화)")]
+        [SerializeField] private GameObject _crosswalkGroup;
 
         // 런타임 상태 변수
         private float _currentDirection = 1f;
@@ -128,9 +127,25 @@ namespace CampusRun.Track
             return pool;
         }
 
+        private Transform[] _dashChildren;
+
         private void Awake()
         {
             _isSafeLane = false;
+            CacheDashChildren();
+        }
+
+        private void CacheDashChildren()
+        {
+            if (_standardDashesGroup != null && _dashChildren == null)
+            {
+                int count = _standardDashesGroup.transform.childCount;
+                _dashChildren = new Transform[count];
+                for (int i = 0; i < count; i++)
+                {
+                    _dashChildren[i] = _standardDashesGroup.transform.GetChild(i);
+                }
+            }
         }
 
         private void OnEnable()
@@ -165,17 +180,83 @@ namespace CampusRun.Track
                 _currentDirection = Mathf.Sign(_fixedDirection);
             }
 
-            // 1-1. 횡단보도 확률 표시 (횡단보도 활성화 시 다양한 위치와 방향으로 스폰)
-            bool isCrosswalk = Random.value < _crosswalkChance;
+            // 1-1. 횡단보도는 완전히 비활성화 (사선/잔선 횡단보도 절대 미출현)
             if (_crosswalkGroup != null)
             {
-                _crosswalkGroup.SetActive(isCrosswalk);
-                if (isCrosswalk)
+                _crosswalkGroup.SetActive(false);
+            }
+
+            // 1-2. 통일했던 그 일자 페인트(점선) 패턴들을 도로마다 랜덤하게 출현
+            float invX = 1f / Mathf.Max(0.001f, transform.localScale.x);
+
+            if (_dashPatternGroups != null && _dashPatternGroups.Length > 0)
+            {
+                // 모든 패턴 일단 끄기
+                for (int i = 0; i < _dashPatternGroups.Length; i++)
                 {
-                    RandomizeCrosswalkVariation();
+                    if (_dashPatternGroups[i] != null) _dashPatternGroups[i].SetActive(false);
+                }
+
+                // 85% 확률로 일자 점선 패턴 중 하나 랜덤 선택 (15%는 페인트 없는 깔끔한 아스팔트 골목길)
+                if (Random.value < 0.85f)
+                {
+                    int chosenIdx = Random.Range(0, _dashPatternGroups.Length);
+                    GameObject chosenPattern = _dashPatternGroups[chosenIdx];
+                    if (chosenPattern != null)
+                    {
+                        chosenPattern.SetActive(true);
+                        // 점선 위상도 살짝 시프트하여 매 도로마다 자연스러운 차선 간격 연출
+                        float shiftX = Random.Range(-2.2f, 2.2f);
+                        chosenPattern.transform.localPosition = new Vector3(shiftX * invX, 0f, 0f);
+                    }
                 }
             }
-            if (_standardDashesGroup != null) _standardDashesGroup.SetActive(!isCrosswalk);
+            else if (_standardDashesGroup != null)
+            {
+                CacheDashChildren();
+
+                // 85% 확률로 일자 점선 패턴 등장 (15%는 페인트 없는 깨끗한 아스팔트)
+                float roll = Random.value;
+                if (roll < 0.85f)
+                {
+                    _standardDashesGroup.SetActive(true);
+
+                    // 점선 X축 위상 랜덤 시프트
+                    float shiftX = Random.Range(-2.2f, 2.2f);
+                    _standardDashesGroup.transform.localPosition = new Vector3(shiftX * invX, 0f, 0f);
+
+                    // 그 일자 페인트를 활용한 3가지 세부 패턴 랜덤 연출:
+                    // 패턴 A (40%): 기본 일정 간격 점선 (모든 대시 표시)
+                    // 패턴 B (35%): 2칸에 1개씩 띄엄띄엄 나타나는 넓은 간격 점선
+                    // 패턴 C (25%): 3칸에 1개씩 시원하게 나타나는 성긴 점선
+                    float subPatternRoll = Random.value;
+                    if (_dashChildren != null)
+                    {
+                        for (int i = 0; i < _dashChildren.Length; i++)
+                        {
+                            if (_dashChildren[i] == null) continue;
+
+                            if (subPatternRoll < 0.40f)
+                            {
+                                _dashChildren[i].gameObject.SetActive(true);
+                            }
+                            else if (subPatternRoll < 0.75f)
+                            {
+                                _dashChildren[i].gameObject.SetActive(i % 2 == 0);
+                            }
+                            else
+                            {
+                                _dashChildren[i].gameObject.SetActive(i % 3 == 0);
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    // 15%는 페인트 없는 깔끔한 아스팔트 골목길
+                    _standardDashesGroup.SetActive(false);
+                }
+            }
 
             // 2. 이 레인에서 달릴 차량 프리팹 선택 (다양한 차종 중 랜덤)
             SelectLaneVehicle();
@@ -188,30 +269,6 @@ namespace CampusRun.Track
             _spawnRoutine = StartCoroutine(VehicleSpawnRoutine());
         }
 
-        /// <summary>
-        /// 횡단보도가 스폰될 때 위치(X축 오프셋)와 방향/스타일 변형을 다양화합니다.
-        /// </summary>
-        private void RandomizeCrosswalkVariation()
-        {
-            if (_crosswalkGroup == null) return;
-
-            // 1. 위치(X축 좌/우/중앙) 다양화: 중앙, 약간 좌측, 약간 우측, 좌측 끝, 우측 끝
-            float[] possibleOffsetsX = new float[] { 0f, -2.0f, 2.0f, -3.5f, 3.5f };
-            float chosenOffsetX = possibleOffsetsX[Random.Range(0, possibleOffsetsX.Length)];
-            float invX = 1f / Mathf.Max(0.001f, transform.localScale.x);
-            _crosswalkGroup.transform.localPosition = new Vector3(chosenOffsetX * invX, 0f, 0f);
-
-            // 2. 여러 방향/스타일 변형(정방향, 좌사선, 우사선, 듀얼 통로) 중 1개 선택 활성화
-            int childCount = _crosswalkGroup.transform.childCount;
-            if (childCount > 0)
-            {
-                int chosenStyleIndex = Random.Range(0, childCount);
-                for (int i = 0; i < childCount; i++)
-                {
-                    _crosswalkGroup.transform.GetChild(i).gameObject.SetActive(i == chosenStyleIndex);
-                }
-            }
-        }
 
         private void SelectLaneVehicle()
         {

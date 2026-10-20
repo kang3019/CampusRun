@@ -44,13 +44,23 @@ namespace CampusRun.Track
         // 런타임 상태
         private float _currentDirection = 1f;
         private Coroutine _cycleRoutine;
-        private IObjectPool<FastMotorcycle> _motorcyclePool;
+        private static IObjectPool<FastMotorcycle> _sharedMotorcyclePool;
         private readonly List<FastMotorcycle> _activeMotorcycles = new List<FastMotorcycle>();
         private static Transform _fastVehicleContainer;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetStatics()
         {
+            ClearSharedPool();
+        }
+
+        public static void ClearSharedPool()
+        {
+            if (_sharedMotorcyclePool != null)
+            {
+                try { _sharedMotorcyclePool.Clear(); } catch { }
+                _sharedMotorcyclePool = null;
+            }
             _fastVehicleContainer = null;
         }
 
@@ -74,7 +84,7 @@ namespace CampusRun.Track
         private void Awake()
         {
             _isSafeLane = false;
-            InitializePool();
+            EnsureSharedPool();
 
             if (_warningIndicator != null)
             {
@@ -82,27 +92,34 @@ namespace CampusRun.Track
             }
         }
 
-        private void InitializePool()
+        private void OnEnable()
         {
-            if (_motorcyclePrefab == null) return;
+            CampusRun.Core.GameEvents.OnGameRestarted += ClearSharedPool;
+        }
 
-            _motorcyclePool = new ObjectPool<FastMotorcycle>(
+        private void OnDisable()
+        {
+            CampusRun.Core.GameEvents.OnGameRestarted -= ClearSharedPool;
+        }
+
+        private void EnsureSharedPool()
+        {
+            if (_motorcyclePrefab == null || _sharedMotorcyclePool != null) return;
+
+            FastMotorcycle prefabRef = _motorcyclePrefab;
+            _sharedMotorcyclePool = new ObjectPool<FastMotorcycle>(
                 createFunc: () =>
                 {
                     // 레인 Transform(Scale: 60, 0.2, 1)의 자식으로 들어가면 60배 왜곡되므로,
                     // 무할당 정규 컨테이너([Vehicle_Pool_Container], Scale 1,1,1)에 인스턴스화
                     Transform container = GetOrCreateContainer();
-                    FastMotorcycle motorcycle = Instantiate(_motorcyclePrefab, container);
+                    FastMotorcycle motorcycle = Instantiate(prefabRef, container);
                     motorcycle.gameObject.SetActive(false);
                     return motorcycle;
                 },
-                actionOnGet: (motorcycle) =>
-                {
-                    _activeMotorcycles.Add(motorcycle);
-                },
+                actionOnGet: (motorcycle) => { },
                 actionOnRelease: (motorcycle) =>
                 {
-                    _activeMotorcycles.Remove(motorcycle);
                     if (motorcycle != null) motorcycle.gameObject.SetActive(false);
                 },
                 actionOnDestroy: (motorcycle) =>
@@ -110,8 +127,8 @@ namespace CampusRun.Track
                     if (motorcycle != null) Destroy(motorcycle.gameObject);
                 },
                 collectionCheck: false,
-                defaultCapacity: 3,
-                maxSize: 8
+                defaultCapacity: 6,
+                maxSize: 16
             );
         }
 
@@ -134,10 +151,7 @@ namespace CampusRun.Track
                 _warningIndicator.SetActive(false);
             }
 
-            if (_motorcyclePool == null)
-            {
-                InitializePool();
-            }
+            EnsureSharedPool();
 
             // 돌진 사이클 루틴 시작
             if (_cycleRoutine != null) StopCoroutine(_cycleRoutine);
@@ -162,9 +176,10 @@ namespace CampusRun.Track
             // 활성화된 모든 오토바이 회수
             for (int i = _activeMotorcycles.Count - 1; i >= 0; i--)
             {
-                if (_activeMotorcycles[i] != null && _motorcyclePool != null)
+                FastMotorcycle motorcycle = _activeMotorcycles[i];
+                if (motorcycle != null && _sharedMotorcyclePool != null)
                 {
-                    _motorcyclePool.Release(_activeMotorcycles[i]);
+                    _sharedMotorcyclePool.Release(motorcycle);
                 }
             }
             _activeMotorcycles.Clear();
@@ -216,9 +231,24 @@ namespace CampusRun.Track
 
         private void SpawnAndRushMotorcycle()
         {
-            if (_motorcyclePrefab == null || _motorcyclePool == null) return;
+            EnsureSharedPool();
+            if (_motorcyclePrefab == null || _sharedMotorcyclePool == null) return;
 
-            FastMotorcycle motorcycle = _motorcyclePool.Get();
+            FastMotorcycle motorcycle = null;
+            try
+            {
+                motorcycle = _sharedMotorcyclePool.Get();
+            }
+            catch
+            {
+                _sharedMotorcyclePool = null;
+                EnsureSharedPool();
+                if (_sharedMotorcyclePool != null) motorcycle = _sharedMotorcyclePool.Get();
+            }
+
+            if (motorcycle == null) return;
+
+            _activeMotorcycles.Add(motorcycle);
 
             // 스폰 위치 계산 (레인 도로면 Y=0.10f, X는 진행 방향 반대쪽 바깥)
             float startX = (_currentDirection > 0) ? -_spawnBoundaryX : _spawnBoundaryX;
@@ -228,9 +258,10 @@ namespace CampusRun.Track
             // 초고속 이동 초기화
             motorcycle.Initialize(_currentDirection, _rushSpeed, (m) =>
             {
-                if (gameObject.activeInHierarchy && _motorcyclePool != null)
+                _activeMotorcycles.Remove(m);
+                if (m != null && _sharedMotorcyclePool != null)
                 {
-                    _motorcyclePool.Release(m);
+                    _sharedMotorcyclePool.Release(m);
                 }
             });
         }
