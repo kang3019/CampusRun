@@ -29,22 +29,22 @@ namespace CampusRun.Obstacles
         [SerializeField] private float _despawnBoundaryX = 30.0f;
 
         [Header("--- 오디오 우선순위 설정 ---")]
-        [Tooltip("플레이어와 가장 가까운 1대의 경찰차만 사이렌 소리를 들려주고 다른 경찰차는 음소거합니다.")]
-        [SerializeField] private bool _enableClosestCarAudioOnly = true;
+        [Tooltip("전체 게임에서 플레이어와 가장 가까운 단 1대의 경찰차만 사이렌을 재생하고, 2대 이상 절대 동시에 울리지 않도록 강제합니다.")]
+        [SerializeField] private bool _enableExclusiveSingleCarAudio = true;
 
-        [Tooltip("사이렌 소리 전환(크로스페이드) 속도")]
-        [SerializeField] private float _audioFadeSpeed = 8.0f;
+        [Tooltip("현재 사이렌을 울리는 경찰차가 다른 경찰차로 전환되기 위해 필요한 최소 거리 차이 (지터링/혼선 방지용 히스테리시스, 단위: m)")]
+        [SerializeField] private float _switchHysteresisDistance = 3.0f;
 
-        // 전역 경찰차 오디오 포커스 관리 (GC 할당 0)
+        // 전역 단일 독점 경찰차 오디오 관리 (GC 할당 0)
         private static readonly List<FastMotorcycle> s_activeCars = new List<FastMotorcycle>(16);
-        private static FastMotorcycle s_closestCar = null;
+        private static FastMotorcycle s_soloAudioCar = null;
         private static int s_lastAudioFrame = -1;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetStatics()
         {
             s_activeCars.Clear();
-            s_closestCar = null;
+            s_soloAudioCar = null;
             s_lastAudioFrame = -1;
         }
 
@@ -74,12 +74,18 @@ namespace CampusRun.Obstacles
             {
                 _audioSource.Stop();
             }
+
+            if (_enableExclusiveSingleCarAudio)
+            {
+                s_lastAudioFrame = -1;
+                UpdateSoloAudioSelection();
+            }
         }
 
         private static void HandleGameRestarted()
         {
             s_activeCars.Clear();
-            s_closestCar = null;
+            s_soloAudioCar = null;
             s_lastAudioFrame = -1;
         }
 
@@ -126,8 +132,14 @@ namespace CampusRun.Obstacles
             // [중요!] 먼저 오브젝트를 활성화해야 AudioSource.Play()가 안전하게 작동
             gameObject.SetActive(true);
 
-            // 3D 경찰차 사이렌 사운드 재생
+            // 3D 경찰차 사이렌 사운드 설정 및 스폰 직후 즉시 단일 독점 상태 계산
             Play3DPoliceSiren();
+
+            if (_enableExclusiveSingleCarAudio)
+            {
+                s_lastAudioFrame = -1;
+                UpdateSoloAudioSelection();
+            }
         }
 
         private void Play3DPoliceSiren()
@@ -145,16 +157,10 @@ namespace CampusRun.Obstacles
             {
                 _audioSource.clip = policeClip;
 
-                // 이미 다른 가장 가까운 경찰차가 울리고 있으면 0에서 시작하여 크로스페이드
-                if (_enableClosestCarAudioOnly && s_closestCar != null && s_closestCar != this)
-                {
-                    _audioSource.volume = 0f;
-                }
-                else
-                {
-                    _audioSource.volume = 1.0f;
-                }
-
+                // 스폰 시점에 이미 다른 독점 경찰차가 존재한다면 소리를 완전 차단(mute)한 상태로 대기
+                bool isSolo = (!_enableExclusiveSingleCarAudio) || (s_soloAudioCar == null || s_soloAudioCar == this);
+                _audioSource.mute = !isSolo;
+                _audioSource.volume = isSolo ? 1.0f : 0f;
                 _audioSource.Play();
             }
         }
@@ -166,11 +172,10 @@ namespace CampusRun.Obstacles
             // X축 방향으로 초고속 직선 이동 (GC Free)
             transform.position += new Vector3(_direction * _currentSpeed * Time.deltaTime, 0f, 0f);
 
-            // 가장 가까운 1대의 경찰차만 오디오 포커스 갱신 및 볼륨 페이드
-            if (_enableClosestCarAudioOnly)
+            // [핵심] 게임 전체에서 단 1대의 경찰차만 소리를 내도록 엄격히 독점 갱신
+            if (_enableExclusiveSingleCarAudio)
             {
-                UpdateClosestCarAudioFocus();
-                UpdateAudioVolume();
+                UpdateSoloAudioSelection();
             }
 
             // 경계선 도달 시 풀에 안전하게 반환
@@ -181,18 +186,22 @@ namespace CampusRun.Obstacles
             }
         }
 
-        private static void UpdateClosestCarAudioFocus()
+        /// <summary>
+        /// 1프레임당 단 한 번만 실행되어 플레이어와 가장 가까운 단 1대의 경찰차를 독점(Solo) 지정하고,
+        /// 그 외의 모든 경찰차는 즉시 음소거(mute = true, volume = 0)하여 2개 이상 동시에 울리지 않도록 차단합니다.
+        /// </summary>
+        private void UpdateSoloAudioSelection()
         {
             if (Time.frameCount == s_lastAudioFrame) return;
             s_lastAudioFrame = Time.frameCount;
 
             if (s_activeCars.Count == 0)
             {
-                s_closestCar = null;
+                s_soloAudioCar = null;
                 return;
             }
 
-            // 플레이어 위치 가져오기 (GridPlayerController 캐싱 싱글톤 또는 카메라)
+            // 플레이어 위치 가져오기 (GridPlayerController 캐싱 싱글톤 또는 메인 카메라)
             Vector3 targetPos = Vector3.zero;
             if (GridPlayerController.Instance != null)
             {
@@ -203,38 +212,52 @@ namespace CampusRun.Obstacles
                 targetPos = Camera.main.transform.position;
             }
 
+            // 1. 현재 독점 경찰차가 여전히 유효한지 확인하고 거리 계산
             FastMotorcycle bestCar = null;
-            float minSqrDist = float.MaxValue;
+            float currentSoloDist = float.MaxValue;
+
+            if (s_soloAudioCar != null && s_soloAudioCar._isActive && s_activeCars.Contains(s_soloAudioCar))
+            {
+                float dx = s_soloAudioCar.transform.position.x - targetPos.x;
+                float dz = s_soloAudioCar.transform.position.z - targetPos.z;
+                currentSoloDist = Mathf.Sqrt(dx * dx + dz * dz);
+                bestCar = s_soloAudioCar;
+            }
+
+            // 2. 다른 경찰차와의 거리 비교
+            // 기존 독점 차량이 있는 경우, 새 차량이 최소 _switchHysteresisDistance(3m) 이상 더 가까워야만 독점권을 넘겨받음 (혼선/깜빡임 방지)
+            float thresholdDist = (bestCar != null) ? (currentSoloDist - _switchHysteresisDistance) : float.MaxValue;
 
             for (int i = 0; i < s_activeCars.Count; i++)
             {
                 FastMotorcycle car = s_activeCars[i];
-                if (car == null || !car._isActive) continue;
+                if (car == null || !car._isActive || car == bestCar) continue;
 
-                // 2D 평면(X, Z) 거리 기준
                 float dx = car.transform.position.x - targetPos.x;
                 float dz = car.transform.position.z - targetPos.z;
-                float sqrDist = dx * dx + dz * dz;
+                float dist = Mathf.Sqrt(dx * dx + dz * dz);
 
-                if (sqrDist < minSqrDist)
+                if (dist < thresholdDist)
                 {
-                    minSqrDist = sqrDist;
+                    thresholdDist = dist;
                     bestCar = car;
                 }
             }
 
-            s_closestCar = bestCar;
-        }
+            s_soloAudioCar = bestCar;
 
-        private void UpdateAudioVolume()
-        {
-            if (_audioSource == null) return;
+            // 3. [철저한 단일 독점 강제]
+            // 오직 s_soloAudioCar 단 1대만 mute = false, volume = 1.0f 로 재생
+            // 나머지 모든 경찰차는 mute = true, volume = 0f 로 즉각 차단하여 2개 이상 절대 겹치지 않음
+            for (int i = 0; i < s_activeCars.Count; i++)
+            {
+                FastMotorcycle car = s_activeCars[i];
+                if (car == null || car._audioSource == null) continue;
 
-            bool isClosest = (this == s_closestCar);
-            float targetVolume = isClosest ? 1.0f : 0.0f;
-
-            // 팝 노이즈 없이 부드럽게 크로스페이드 전환
-            _audioSource.volume = Mathf.MoveTowards(_audioSource.volume, targetVolume, Time.deltaTime * _audioFadeSpeed);
+                bool isSolo = (car == s_soloAudioCar);
+                car._audioSource.mute = !isSolo;
+                car._audioSource.volume = isSolo ? 1.0f : 0f;
+            }
         }
 
         public void Despawn()
@@ -251,14 +274,21 @@ namespace CampusRun.Obstacles
             _isActive = false;
             gameObject.SetActive(false);
             _onDespawnCallback?.Invoke(this);
+
+            // 독점 차량이 사라졌으므로 즉시 남아있는 가장 가까운 차에게 독점권 인계
+            if (_enableExclusiveSingleCarAudio)
+            {
+                s_lastAudioFrame = -1;
+                UpdateSoloAudioSelection();
+            }
         }
 
         private void UnregisterActiveCar()
         {
             s_activeCars.Remove(this);
-            if (s_closestCar == this)
+            if (s_soloAudioCar == this)
             {
-                s_closestCar = null;
+                s_soloAudioCar = null;
             }
         }
     }
