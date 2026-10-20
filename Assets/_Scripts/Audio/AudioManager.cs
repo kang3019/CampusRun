@@ -72,7 +72,7 @@ namespace CampusRun.Audio
         public AudioClip PoliceCarClip => _customPoliceCarClip;
 
         [Header("--- 4. 충돌 및 사망 효과음 ---")]
-        [Tooltip("차량 충돌 급브레이크 및 쾅 충격음 (carbreak.wav)")]
+        [Tooltip("차량 충돌 급브레이크 및 쾅 충격음 (carbreak1.wav)")]
         [SerializeField] private AudioClip _customCarBreakClip;
 
         [Tooltip("차량 충돌 급브레이크 볼륨 (0.0 ~ 2.0)")]
@@ -222,7 +222,8 @@ namespace CampusRun.Audio
 
             if (_customCarBreakClip == null)
             {
-                _customCarBreakClip = Resources.Load<AudioClip>("SFX/carbreak");
+                AudioClip carbreak1 = Resources.Load<AudioClip>("SFX/carbreak1");
+                _customCarBreakClip = carbreak1 != null ? carbreak1 : Resources.Load<AudioClip>("SFX/carbreak");
             }
 
             if (_customLogSplashClip == null)
@@ -414,12 +415,13 @@ namespace CampusRun.Audio
         }
 
         /// <summary>
-        /// 차량(승용차, 트럭, 버스, 경찰차 등)과 충돌 시 '끼이익! 쾅!!' 급제동 및 충돌음(carbreak.wav)을 재생합니다.
+        /// 차량(승용차, 트럭, 버스, 경찰차 등)과 충돌 시 '끼이익! 쾅!!' 급제동 및 충돌음(carbreak1.wav)을 재생합니다.
         /// 더블 임팩트 레이어링 기법을 적용하여 찢어짐 없이 묵직하고 시원한 음압으로 출력합니다.
         /// </summary>
         public void PlayCarBreakSound()
         {
-            AudioClip clip = _customCarBreakClip != null ? _customCarBreakClip : Resources.Load<AudioClip>("SFX/carbreak");
+            AudioClip clip = _customCarBreakClip != null ? _customCarBreakClip 
+                : (Resources.Load<AudioClip>("SFX/carbreak1") ?? Resources.Load<AudioClip>("SFX/carbreak"));
             if (clip != null)
             {
                 float basePitch = Random.Range(0.98f, 1.02f);
