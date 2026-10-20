@@ -38,12 +38,14 @@ namespace CampusRun.Obstacles
         private static FastMotorcycle s_targetCar = null;
         private static AudioSource s_globalSirenSource = null;
         private static int s_lastAudioFrame = -1;
+        private static float s_nextSirenAvailableTime = 0f;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetStatics()
         {
             s_activeCars.Clear();
             s_targetCar = null;
+            s_nextSirenAvailableTime = 0f;
             if (s_globalSirenSource != null)
             {
                 try { s_globalSirenSource.Stop(); } catch { }
@@ -74,6 +76,7 @@ namespace CampusRun.Obstacles
             s_activeCars.Clear();
             s_targetCar = null;
             s_lastAudioFrame = -1;
+            s_nextSirenAvailableTime = 0f;
 
             if (s_globalSirenSource != null && s_globalSirenSource.isPlaying)
             {
@@ -102,11 +105,11 @@ namespace CampusRun.Obstacles
             }
 
             // 쿼터뷰 시점에 최적화된 3D 공간 음향 설정
-            s_globalSirenSource.spatialBlend = 0.88f;             // 88% 3D 입체 음향
+            s_globalSirenSource.spatialBlend = 0.85f;             // 3D 입체 음향 (좌우 패닝 및 거리감 유지)
             s_globalSirenSource.rolloffMode = AudioRolloffMode.Linear; // 선형 거리 감쇠
-            s_globalSirenSource.minDistance = 9.0f;               // 카메라/플레이어 앞을 지날 때 최대 100% 음량
-            s_globalSirenSource.maxDistance = 60.0f;              // 멀리서부터 다가오는 입체감 유지
-            s_globalSirenSource.dopplerLevel = 1.2f;              // 초고속 질주 도플러 효과
+            s_globalSirenSource.minDistance = 8.0f;               // 카메라/플레이어 앞을 지날 때 최대 100% 음량
+            s_globalSirenSource.maxDistance = 50.0f;              // 거리 감쇠
+            s_globalSirenSource.dopplerLevel = 0.0f;              // [중요!] 도플러 효과를 0으로 설정하여 피치 굴절 및 2중 소리 왜곡 완전 차단
             s_globalSirenSource.playOnAwake = false;
             s_globalSirenSource.loop = true;
 
@@ -169,8 +172,9 @@ namespace CampusRun.Obstacles
         }
 
         /// <summary>
-        /// 전체 게임에서 단 1개의 사이렌 AudioSource가 현재 가장 가까운 단 1대의 경찰차를 추적합니다.
-        /// 물리적으로 AudioSource가 1개뿐이므로 2대 이상 겹쳐 울리는 현상이 100% 원천 차단됩니다.
+        /// 전체 게임에서 단 1개의 사이렌 AudioSource가 현재 경찰차를 끝까지 추적합니다.
+        /// 1) 현재 추적 중인 경찰차가 완전히 사라질 때까지 다른 차로 소리를 가로채지 않습니다.
+        /// 2) 차가 사라진 후 1.2초간 쿨다운을 두어 사이렌이 쉼 없이 겹치듯 울리는 현상을 방지합니다.
         /// </summary>
         private static void UpdateGlobalSirenChannel()
         {
@@ -188,7 +192,30 @@ namespace CampusRun.Obstacles
                 return;
             }
 
-            // 플레이어 위치 가져오기 (GridPlayerController 캐싱 싱글톤 또는 메인 카메라)
+            // 2. 현재 타겟 경찰차가 여전히 유효하게 달리고 있다면,
+            // [중요!] 중간에 어떤 다른 경찰차가 오더라도 절대 타겟을 바꾸지 않고 이 차를 끝까지 추적합니다!
+            if (s_targetCar != null && s_targetCar._isActive && s_activeCars.Contains(s_targetCar))
+            {
+                siren.transform.position = s_targetCar.transform.position;
+                if (!siren.isPlaying && siren.clip != null)
+                {
+                    siren.volume = 1.0f;
+                    siren.mute = false;
+                    siren.Play();
+                }
+                return;
+            }
+
+            // 3. 현재 타겟이 없거나 소멸된 상태: 쿨다운 체크
+            // 이전 경찰차가 지나간 직후 최소 1.2초 동안은 정적을 유지하여 겹침 느낌을 해소
+            if (Time.time < s_nextSirenAvailableTime)
+            {
+                s_targetCar = null;
+                if (siren.isPlaying) siren.Stop();
+                return;
+            }
+
+            // 4. 쿨다운이 끝났으므로 가장 가까운 새 경찰차를 새 타겟으로 지정
             Vector3 targetPos = Vector3.zero;
             if (GridPlayerController.Instance != null)
             {
@@ -199,58 +226,25 @@ namespace CampusRun.Obstacles
                 targetPos = Camera.main.transform.position;
             }
 
-            // 2. 현재 추적 중인 경찰차가 여전히 유효한지 확인
-            bool needNewTarget = false;
-            if (s_targetCar == null || !s_targetCar._isActive || !s_activeCars.Contains(s_targetCar))
-            {
-                needNewTarget = true;
-            }
-            else
-            {
-                // 현재 경찰차가 이미 플레이어 앞을 완전히 지나쳐 멀어지고 있는가?
-                // 플레이어와의 거리가 10m 이상 멀어졌고, 더 가까운 새 경찰차가 있다면 교체
-                float currentDistSqr = (s_targetCar.transform.position - targetPos).sqrMagnitude;
-                if (currentDistSqr > 64.0f) // 8m 이상 멀어진 상태
-                {
-                    for (int i = 0; i < s_activeCars.Count; i++)
-                    {
-                        FastMotorcycle car = s_activeCars[i];
-                        if (car == null || !car._isActive || car == s_targetCar) continue;
+            FastMotorcycle closestCar = null;
+            float minSqrDist = float.MaxValue;
 
-                        float distSqr = (car.transform.position - targetPos).sqrMagnitude;
-                        // 현재 차보다 8m(64 sqr) 이상 더 가까운 차가 있으면 인계
-                        if (distSqr + 64.0f < currentDistSqr)
-                        {
-                            s_targetCar = car;
-                            break;
-                        }
-                    }
+            for (int i = 0; i < s_activeCars.Count; i++)
+            {
+                FastMotorcycle car = s_activeCars[i];
+                if (car == null || !car._isActive) continue;
+
+                float sqrDist = (car.transform.position - targetPos).sqrMagnitude;
+                if (sqrDist < minSqrDist)
+                {
+                    minSqrDist = sqrDist;
+                    closestCar = car;
                 }
             }
 
-            // 3. 새 타겟 선정 (기존 타겟이 사라졌을 때)
-            if (needNewTarget)
-            {
-                FastMotorcycle closestCar = null;
-                float minSqrDist = float.MaxValue;
+            s_targetCar = closestCar;
 
-                for (int i = 0; i < s_activeCars.Count; i++)
-                {
-                    FastMotorcycle car = s_activeCars[i];
-                    if (car == null || !car._isActive) continue;
-
-                    float sqrDist = (car.transform.position - targetPos).sqrMagnitude;
-                    if (sqrDist < minSqrDist)
-                    {
-                        minSqrDist = sqrDist;
-                        closestCar = car;
-                    }
-                }
-
-                s_targetCar = closestCar;
-            }
-
-            // 4. 단 1개의 전역 사이렌을 타겟 경찰차의 위치로 이동 및 재생
+            // 5. 새 타겟 경찰차의 위치로 단 1개의 전역 사이렌을 이동 및 재생
             if (s_targetCar != null)
             {
                 siren.transform.position = s_targetCar.transform.position;
@@ -271,15 +265,25 @@ namespace CampusRun.Obstacles
         {
             if (!_isActive) return;
 
+            bool wasTarget = (s_targetCar == this);
             UnregisterActiveCar();
 
             _isActive = false;
             gameObject.SetActive(false);
             _onDespawnCallback?.Invoke(this);
 
-            // 타겟 차량이 사라졌으면 즉시 다음 활성 차량으로 전역 사이렌 인계
-            s_lastAudioFrame = -1;
-            UpdateGlobalSirenChannel();
+            // 소리를 내던 경찰차가 완전히 사라졌으면:
+            // 소리를 즉시 멈추고 최소 1.2초간 쿨다운을 설정하여 다음 차 소리와 겹치지 않도록 휴식기 부여
+            if (wasTarget)
+            {
+                s_targetCar = null;
+                s_nextSirenAvailableTime = Time.time + 1.2f;
+
+                if (s_globalSirenSource != null && s_globalSirenSource.isPlaying)
+                {
+                    s_globalSirenSource.Stop();
+                }
+            }
         }
 
         private void UnregisterActiveCar()
