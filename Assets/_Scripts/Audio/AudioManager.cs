@@ -27,20 +27,20 @@ namespace CampusRun.Audio
         [Tooltip("점프 사운드 피치 최대값 (톡 소리)")]
         [SerializeField] private float _hopPitchMax = 1.07f;
 
-        [Header("--- 2. 통나무 착지 효과음 ---")]
-        [Tooltip("통나무/부유판 착지 나무 사운드 (wood1.wav)")]
+        [Header("--- 2. 통나무 디딤 효과음 ---")]
+        [Tooltip("통나무/부유판 디딤 나무 노크 사운드 (wood1.wav)")]
         [SerializeField] private AudioClip _customWoodPlankClip;
 
-        [Tooltip("통나무 착지 시 첨벙~ 물 튀김 사운드 (splash.wav)")]
+        [Tooltip("통나무 착지 시 물 튀김 사운드 (비워둘 시 사용 안 함)")]
         [SerializeField] private AudioClip _customLogSplashClip;
 
-        [Tooltip("통나무 착지 나무 사운드 볼륨 (0.0 ~ 2.0)")]
+        [Tooltip("통나무 디딤 나무 사운드 볼륨 (0.0 ~ 2.0)")]
         [Range(0f, 2f)]
-        [SerializeField] private float _woodPlankVolume = 0.85f;
+        [SerializeField] private float _woodPlankVolume = 1.0f;
 
-        [Tooltip("통나무 착지 첨벙~ 물 튀김 볼륨 (0.0 ~ 2.0)")]
+        [Tooltip("통나무 물 튀김 볼륨 (0.0 ~ 2.0)")]
         [Range(0f, 2f)]
-        [SerializeField] private float _logSplashVolume = 1.35f;
+        [SerializeField] private float _logSplashVolume = 0.0f;
 
         public AudioClip WoodPlankClip => _customWoodPlankClip;
         public AudioClip LogSplashClip => _customLogSplashClip;
@@ -85,8 +85,12 @@ namespace CampusRun.Audio
         public AudioClip CarBreakClip => _customCarBreakClip;
         public float CarBreakVolume => _carBreakVolume;
 
-        [Tooltip("물에 빠짐(익사) 사운드")]
+        [Tooltip("물에 빠짐(익사) 사운드 (SFX/splash)")]
         [SerializeField] private AudioClip _customSplashClip;
+
+        [Tooltip("물에 빠짐(익사) 사운드 볼륨 배율 (0.0 ~ 2.5)")]
+        [Range(0f, 2.5f)]
+        [SerializeField] private float _splashVolume = 1.6f;
 
         [Tooltip("지각 타임아웃 경고음")]
         [SerializeField] private AudioClip _customWarningClip;
@@ -122,6 +126,27 @@ namespace CampusRun.Audio
         private AudioClip _proceduralHitClip;
         private AudioClip _proceduralSplashClip;
         private AudioClip _proceduralWarningClip;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStaticOnDomainReloadDisabled()
+        {
+            ResetShutdownFlag();
+        }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+        private static void EnsureBootstrappedOnPlayMode()
+        {
+            ResetShutdownFlag();
+            AudioManager mgr = Instance;
+            if (mgr != null)
+            {
+                mgr.InitializeAudioSources();
+                mgr.LoadDefaultResourcesAudio();
+                mgr.SubscribeEvents();
+                mgr._lastVehicleSoundTime = -10f;
+                mgr._lastSplashSoundTime = -10f;
+            }
+        }
 
         protected override void Awake()
         {
@@ -296,7 +321,7 @@ namespace CampusRun.Audio
             // 1. 둔탁한 도약음(Thud Hop): 고주파 뿅뿅 소리를 배제하고 지면 타격감과 중저역 킥을 조합한 툭/톡 사운드
             _proceduralThudHopClip = CreateThudFootstepClip("Procedural_ThudHop", 0.085f, 130f, 48f);
 
-            // 2. 통나무 착지음(Wood Plank Thud)
+            // 2. 통나무 디딤음(Wood Plank Knock)
             _proceduralWoodPlankClip = CreateWoodPlankClip("Procedural_WoodPlank", 0.12f);
 
             // 3. 둔탁한 충돌음(Crash Hit): 무거운 충돌
@@ -342,35 +367,27 @@ namespace CampusRun.Audio
         }
 
         /// <summary>
-        /// 하천의 통나무/부유판에 플레이어가 안착했을 때 효과음(첨벙~ 물 튀김 + 나무 착지음)을 재생합니다.
+        /// 하천의 통나무/부유판에 플레이어가 오르거나 통나무 위에서 이동할 때
+        /// 경쾌하고 짧은 통나무 디딤 소리('통!/탁!' 우드 노크 사운드)만 깔끔하게 재생합니다.
+        /// (물 빠짐 효과음 splash.wav는 실제 물에 빠졌을 때만 재생되도록 분리)
         /// </summary>
         public void PlayWoodPlankSound()
         {
-            if (_customWoodPlankClip == null || _customLogSplashClip == null)
+            if (_customWoodPlankClip == null)
             {
                 LoadDefaultResourcesAudio();
             }
 
-            // 1. [핵심] 통나무 착지 시 '첨벙~' 물 튀김 효과음 재생
-            AudioClip splashClip = _customLogSplashClip != null ? _customLogSplashClip 
-                : (_customSplashClip != null ? _customSplashClip : _proceduralSplashClip);
-            if (splashClip != null)
-            {
-                float splashPitch = Random.Range(0.97f, 1.05f);
-                PlaySFX(splashClip, 1.35f * _logSplashVolume, splashPitch);
-            }
-
-            // 2. 통나무 착지 나무 판자음(wood1.wav) 서브 레이어링 (묵직한 안착감 보강)
             AudioClip woodClip = _customWoodPlankClip != null ? _customWoodPlankClip : _proceduralWoodPlankClip;
             if (woodClip != null)
             {
-                float woodPitch = Random.Range(0.96f, 1.04f);
-                PlaySFX(woodClip, 0.70f * _woodPlankVolume, woodPitch);
+                float woodPitch = Random.Range(0.94f, 1.06f);
+                PlaySFX(woodClip, 1.15f * _woodPlankVolume, woodPitch);
             }
         }
 
         /// <summary>
-        /// 통나무 착지 전용 첨벙~ 물 튀김 효과음을 재생합니다.
+        /// 통나무 디딤 효과음 호환용 래퍼 메서드입니다.
         /// </summary>
         public void PlayLogSplashSound()
         {
@@ -445,13 +462,30 @@ namespace CampusRun.Audio
             PlaySFX(clip, 1.0f, Random.Range(0.92f, 1.04f));
         }
 
+        private float _lastSplashSoundTime = -10f;
+
         /// <summary>
-        /// 물에 빠지는 효과음을 재생합니다.
+        /// 물에 빠지는 효과음(SFX/splash)을 재생합니다.
+        /// 더블 임팩트 레이어링 기법을 적용하여 차량 소음 속에서도 선명하고 묵직하게 들리도록 출력합니다.
         /// </summary>
         public void PlaySplashSound()
         {
+            if (Time.unscaledTime - _lastSplashSoundTime < 0.12f) return;
+            _lastSplashSoundTime = Time.unscaledTime;
+
+            if (_customSplashClip == null)
+            {
+                _customSplashClip = Resources.Load<AudioClip>("SFX/splash");
+            }
+
             AudioClip clip = _customSplashClip != null ? _customSplashClip : _proceduralSplashClip;
-            PlaySFX(clip, 0.95f, Random.Range(0.95f, 1.05f));
+            if (clip != null)
+            {
+                // 주 채널 (선명한 물보라 어택 사운드)
+                PlaySFX(clip, 1.5f * _splashVolume, 1.0f);
+                // 서브 채널 (풍덩! 중저음 바디감 및 음압 2배 보강 레이어링)
+                PlaySFX(clip, 1.15f * _splashVolume, 0.94f);
+            }
         }
 
         /// <summary>
@@ -489,7 +523,7 @@ namespace CampusRun.Audio
 
             source.pitch = pitch;
             source.spatialBlend = 0f; // 2D 균일 청취 보장
-            float finalVolume = Mathf.Clamp(volume * _sfxVolume * _masterVolume, 0f, 1.5f);
+            float finalVolume = Mathf.Clamp(volume * _sfxVolume * _masterVolume, 0f, 2.5f);
             source.PlayOneShot(clip, finalVolume);
         }
 
@@ -603,7 +637,7 @@ namespace CampusRun.Audio
         }
 
         /// <summary>
-        /// 통나무 착지 시 둔탁한 나무 울림과 물기 있는 착수음 합성
+        /// 통나무 디딤 시 경쾌하고 속이 꽉 찬 나무 울림('통!/탁!') 우드 노크 사운드 합성
         /// </summary>
         private AudioClip CreateWoodPlankClip(string clipName, float duration)
         {
@@ -611,19 +645,25 @@ namespace CampusRun.Audio
             int sampleCount = Mathf.CeilToInt(sampleRate * duration);
             float[] samples = new float[sampleCount];
 
-            float phase = 0f;
+            float phase1 = 0f;
+            float phase2 = 0f;
             for (int i = 0; i < sampleCount; i++)
             {
                 float t = (float)i / sampleCount;
-                float currentFreq = Mathf.Lerp(260f, 95f, Mathf.Pow(t, 0.5f));
-                phase += 2.0f * Mathf.PI * currentFreq / sampleRate;
+                float sec = (float)i / sampleRate;
 
-                float sine = Mathf.Sin(phase);
-                float hollow = Mathf.Sin(phase * 1.5f) * 0.35f;
-                float waterSpray = (Random.value * 2f - 1f) * Mathf.Max(0f, 1f - t * 3.5f) * 0.22f;
-                float envelope = Mathf.Exp(-t * 22.0f);
+                // 1. 통나무 몸통 공명 (230Hz -> 155Hz)
+                float f1 = Mathf.Lerp(230f, 155f, Mathf.Pow(t, 0.45f));
+                phase1 += 2.0f * Mathf.PI * f1 / sampleRate;
 
-                samples[i] = ((sine + hollow) * 0.7f + waterSpray) * envelope;
+                // 2. 우드블록 배음 공명 (385Hz -> 290Hz)
+                float f2 = Mathf.Lerp(385f, 290f, Mathf.Pow(t, 0.4f));
+                phase2 += 2.0f * Mathf.PI * f2 / sampleRate;
+
+                float body = Mathf.Sin(phase1) * Mathf.Exp(-sec * 28.0f);
+                float woodCavity = Mathf.Sin(phase2) * Mathf.Exp(-sec * 42.0f) * 0.55f;
+
+                samples[i] = (body * 0.75f + woodCavity) * 0.9f;
             }
 
             AudioClip clip = AudioClip.Create(clipName, sampleCount, 1, sampleRate, false);
