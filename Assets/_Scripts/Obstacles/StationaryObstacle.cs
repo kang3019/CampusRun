@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace CampusRun.Obstacles
 {
@@ -18,6 +19,7 @@ namespace CampusRun.Obstacles
         private Action<StationaryObstacle> _onRecycleCallback;
         private bool _isSpawned = false;
         private Collider _collider;
+        private MeshRenderer[] _meshRenderers;
 
         public string ObstacleName => _obstacleName;
         public bool IsSpawned => _isSpawned;
@@ -25,12 +27,13 @@ namespace CampusRun.Obstacles
         private void Awake()
         {
             _collider = GetComponent<Collider>();
+            _meshRenderers = GetComponentsInChildren<MeshRenderer>(true);
         }
 
         /// <summary>
         /// 풀에서 꺼내져 지정한 그리드 위치에 배치될 때 초기화합니다.
         /// </summary>
-        public void Initialize(Vector3 spawnPosition, Action<StationaryObstacle> onRecycle, bool enableCollider = true)
+        public void Initialize(Vector3 spawnPosition, Action<StationaryObstacle> onRecycle, bool enableCollider = true, bool castShadows = true)
         {
             transform.position = spawnPosition;
             _onRecycleCallback = onRecycle;
@@ -39,6 +42,19 @@ namespace CampusRun.Obstacles
             {
                 _collider.enabled = enableCollider;
             }
+
+            if (_meshRenderers != null)
+            {
+                ShadowCastingMode shadowMode = castShadows ? ShadowCastingMode.On : ShadowCastingMode.Off;
+                for (int i = 0; i < _meshRenderers.Length; i++)
+                {
+                    if (_meshRenderers[i] != null)
+                    {
+                        _meshRenderers[i].shadowCastingMode = shadowMode;
+                    }
+                }
+            }
+
             gameObject.SetActive(true);
         }
 

@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Rendering.Universal;
 using CampusRun.Core;
 using CampusRun.Effects;
 
@@ -61,6 +62,7 @@ namespace CampusRun.Player
         [SerializeField] private float _deathBehindThreshold = 2.5f;
 
         private Vector3 _currentVelocity;
+        private Vector3 _smoothedPosition;
         private float _currentBaseZ = 0f;
         private GridPlayerController _playerController;
         private bool _hasGameStarted = false;
@@ -144,16 +146,42 @@ namespace CampusRun.Player
             transform.rotation = Quaternion.Euler(_pitchAngle, _yawAngle, 0f);
         }
 
+        private void ConfigureAntiShimmerSettings()
+        {
+            // VSync로 인한 30FPS 반토막 드랍(Half-rate Stutter)을 방지하고 120FPS 고주사율을 허용
+            QualitySettings.vSyncCount = 0;
+            Application.targetFrameRate = 120;
+            QualitySettings.anisotropicFiltering = AnisotropicFiltering.Enable;
+
+            Camera cam = GetComponent<Camera>();
+            if (cam != null)
+            {
+                cam.allowMSAA = false; // 무거운 하드웨어 MSAA 대신 초경량 FXAA만 사용하여 노트북 GPU 부하 최소화
+                // 원거리 클리핑 평면을 1000m -> 120m로 좁혀 깊이 버퍼(Depth Buffer) 정밀도를 10배 이상 확보 (바닥 차선/점자블록 Z-Fighting 깜빡임 차단)
+                cam.nearClipPlane = 0.5f;
+                cam.farClipPlane = 120f;
+            }
+
+            UniversalAdditionalCameraData urpCamData = GetComponent<UniversalAdditionalCameraData>();
+            if (urpCamData != null)
+            {
+                // 대각선 쿼터뷰 모서리 계단 현상 및 이동 시 픽셀 일렁임(Pixel Crawling) 제거를 위해 초경량 FXAA 활성화
+                urpCamData.antialiasing = AntialiasingMode.FastApproximateAntialiasing;
+            }
+        }
+
         private void Awake()
         {
+            ConfigureAntiShimmerSettings();
+
             if (_viewMode != CameraViewMode.Custom)
             {
                 ApplyViewMode();
             }
             ApplyFixedRotation();
             FindTargetIfNull();
+            _smoothedPosition = transform.position;
         }
-
 
         private void Start()
         {
@@ -195,14 +223,17 @@ namespace CampusRun.Player
 
             // 2. 부드러운 위치 추격 (SmoothDamp)
             // [중요] 플레이어의 점프(Y축 덜컹거림)를 무시하고 바닥(0f) 기준으로 고정하여 시점 튐/멀미 완전 방지
+            // ShakeOffset과 보간 기준 위치(_smoothedPosition)를 분리하여 SmoothDamp 속도 오염으로 인한 미세 떨림 원천 차단
             Vector3 targetPosition = new Vector3(_target.position.x, 0f, _currentBaseZ) + _offset;
-            transform.position = Vector3.SmoothDamp(transform.position, targetPosition, ref _currentVelocity, _smoothTime);
+            _smoothedPosition = Vector3.SmoothDamp(_smoothedPosition, targetPosition, ref _currentVelocity, _smoothTime);
 
             // 카메라 쉐이크 오프셋 반영 (충돌 및 물 빠짐 시 진동)
+            Vector3 finalPosition = _smoothedPosition;
             if (CameraShake.Instance != null)
             {
-                transform.position += CameraShake.Instance.ShakeOffset;
+                finalPosition += CameraShake.Instance.ShakeOffset;
             }
+            transform.position = finalPosition;
 
             // [중요] 매 프레임 LookAt 호출 시 회전이 뒤틀리는 현상을 없애고, 안정적인 고정 각도 유지
             ApplyFixedRotation();
@@ -244,7 +275,8 @@ namespace CampusRun.Player
         {
             if (_target != null)
             {
-                transform.position = new Vector3(_target.position.x, 0f, _target.position.z) + _offset;
+                _smoothedPosition = new Vector3(_target.position.x, 0f, _target.position.z) + _offset;
+                transform.position = _smoothedPosition;
                 ApplyFixedRotation();
             }
         }

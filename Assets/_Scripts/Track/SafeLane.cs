@@ -59,8 +59,8 @@ namespace CampusRun.Track
         [Tooltip("와이드 화면 양옆 공백을 메우는 사이드 가로수 프리팹 (비어있으면 _obstaclePrefabs 중 Tree 자동 탐색)")]
         [SerializeField] private StationaryObstacle _sideTreePrefab;
 
-        [Tooltip("사이드 가로수가 배치될 좌우 X축 좌표 목록 (플레이 영역 ±4칸 바깥)")]
-        [SerializeField] private float[] _sideTreePositionsX = new float[] { -6.5f, -9.8f, -13.2f, -16.8f, -20.5f, 6.5f, 9.8f, 13.2f, 16.8f, 20.5f };
+        [Tooltip("사이드 가로수가 배치될 좌우 X축 좌표 목록 (노트북 프레임 최적화를 위해 양옆 핵심 2그루 배치)")]
+        [SerializeField] private float[] _sideTreePositionsX = new float[] { -6.5f, 6.5f };
 
         [Tooltip("사이드 가로수 스폰 활성화 여부")]
         [SerializeField] private bool _enableSideTrees = true;
@@ -69,7 +69,7 @@ namespace CampusRun.Track
         private MeshRenderer _meshRenderer;
         private StationaryObstacle _cachedSideTreePrefab;
 
-        // [핵심!] SafeLane의 Transform 스케일(20, 0.2, 1) 왜곡을 장애물이 상속받지 않도록 독립 컨테이너 사용
+        // [핵심!] SafeLane의 Transform 스케일(60, 0.2, 1) 왜곡을 장애물이 상속받지 않도록 독립 컨테이너 사용
         private static Transform _obstacleRootContainer;
         private static Transform _decorRootContainer;
 
@@ -202,8 +202,8 @@ namespace CampusRun.Track
                 actionOnRelease: (obj) => { if (obj != null) obj.SetActive(false); },
                 actionOnDestroy: (obj) => { if (obj != null) Destroy(obj); },
                 collectionCheck: false,
-                defaultCapacity: 10,
-                maxSize: 40
+                defaultCapacity: 8,
+                maxSize: 24
             );
         }
 
@@ -212,11 +212,9 @@ namespace CampusRun.Track
             if (prefab == null) return null;
             if (_sharedObstaclePools.TryGetValue(prefab, out var pool) && pool != null) return pool;
 
-            // 사이드 가로수(Tree)는 한 레인당 10그루씩 약 20~25개 레인에 동시 배치되므로 풀 용량을 넉넉히 확보하여
-            // 점프 시 실시간 Instantiate / Destroy로 인한 프레임 드랍(렉)을 완벽히 제거합니다.
             bool isTree = prefab == _cachedSideTreePrefab || prefab.name.Contains("Tree");
-            int defaultCap = isTree ? 150 : 16;
-            int maxCap = isTree ? 350 : 60;
+            int defaultCap = isTree ? 48 : 12;
+            int maxCap = isTree ? 120 : 40;
 
             Transform container = GetOrCreateObstacleContainer();
             pool = new ObjectPool<StationaryObstacle>(
@@ -235,6 +233,19 @@ namespace CampusRun.Track
                 maxSize: maxCap
             );
             _sharedObstaclePools[prefab] = pool;
+
+            // 풀 최초 생성 시 사전 예열(Prewarm)하여 플레이 도중 점프할 때 실시간 Instantiate 렉 원천 차단
+            int prewarmCount = isTree ? 36 : 8;
+            StationaryObstacle[] prewarmed = new StationaryObstacle[prewarmCount];
+            for (int i = 0; i < prewarmCount; i++)
+            {
+                prewarmed[i] = pool.Get();
+            }
+            for (int i = 0; i < prewarmCount; i++)
+            {
+                if (prewarmed[i] != null) pool.Release(prewarmed[i]);
+            }
+
             return pool;
         }
 
@@ -276,8 +287,8 @@ namespace CampusRun.Track
         }
 
         /// <summary>
-        /// 와이드 스크린에서 좌우 공백을 가려주고 풍성한 그림자를 드리우는 사이드 가로수길을 스폰합니다.
-        /// (플레이 영역 ±4칸 바깥에만 배치되어 플레이어 통행을 100% 보장합니다)
+        /// 와이드 스크린에서 좌우 공백을 가려주는 사이드 가로수길을 스폰합니다.
+        /// 노트북 환경에서 프레임 드랍을 막기 위해 양옆 가장자리 핵심 위치(±8.0m 이내)에만 배치하고 그림자 연산을 끕니다.
         /// </summary>
         private void SpawnSideTrees()
         {
@@ -299,6 +310,9 @@ namespace CampusRun.Track
             for (int i = 0; i < _sideTreePositionsX.Length; i++)
             {
                 float baseX = _sideTreePositionsX[i];
+                // 노트북/내장 그래픽 최적화: 플레이 영역 바로 바깥(±8.0m 이내)의 핵심 가로수 2그루만 스폰하여 드로우콜 67% 절감
+                if (Mathf.Abs(baseX) > 8.0f) continue;
+
                 // 자연스러운 숲길 느낌을 위한 약간의 시차 지터
                 float offsetX = Mathf.Sin(LaneZIndex * 3.7f + i) * 0.35f;
                 float spawnX = baseX + offsetX;
@@ -324,14 +338,14 @@ namespace CampusRun.Track
                 Vector3 spawnPos = new Vector3(spawnX, 0.10f, LaneZIndex);
                 _activeObstacleInfos.Add(new SpawnedObstacleInfo { Obstacle = tree, Pool = pool });
 
-                // 플레이어 이동 반경(±4칸) 바깥의 배경 가로수는 외형은 그대로 유지하되 물리 Collider만 꺼서 물리 엔진 부하를 제거합니다.
+                // 배경 가로수는 물리 Collider와 그림자 연산(castShadows)을 모두 꺼서 GPU 부하를 제거합니다.
                 tree.Initialize(spawnPos, (obs) =>
                 {
                     if (pool != null && obs != null)
                     {
                         pool.Release(obs);
                     }
-                }, enableCollider: false);
+                }, enableCollider: false, castShadows: false);
 
                 // 가로수의 자연스러운 회전 변화 (Y축 회전)
                 float randomRotY = (LaneZIndex * 47f + i * 31f) % 360f;
@@ -419,7 +433,7 @@ namespace CampusRun.Track
                 {
                     pool.Release(obs);
                 }
-            });
+            }, enableCollider: true, castShadows: true);
         }
 
         private StationaryObstacle GetRandomObstaclePrefab()

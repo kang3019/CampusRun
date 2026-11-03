@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
@@ -81,8 +81,8 @@ namespace CampusRun.UI
         private void Awake()
         {
             // 프레임 타임 안정화 및 GPU 발열/스터터링 방지 (60 FPS 고정)
-            Application.targetFrameRate = 60;
-            QualitySettings.vSyncCount = 1;
+            Application.targetFrameRate = 120;
+            QualitySettings.vSyncCount = 0;
 
             // 16:9 해상도 (1920x1080) 보장
             if (!Application.isEditor)
