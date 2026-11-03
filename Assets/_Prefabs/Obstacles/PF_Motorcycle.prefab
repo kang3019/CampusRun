@@ -31,7 +31,7 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
-  - {fileID: 5412456363510082317}
+  - {fileID: 6004372226040766609}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!65 &5000000000000001
@@ -70,7 +70,7 @@ MonoBehaviour:
   _vehicleDisplayName: "\uACBD\uCC30\uCC28"
   _rushSpeed: 30
   _despawnBoundaryX: 30
---- !u!1 &1805508402569820213
+--- !u!1 &1265217852557308384
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -78,46 +78,46 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 1972836016918151776}
-  - component: {fileID: 5676389648290604594}
-  - component: {fileID: 7904666324964624432}
+  - component: {fileID: 8710463539488146197}
+  - component: {fileID: 784017736521475447}
+  - component: {fileID: 5486237641618709739}
   m_Layer: 0
-  m_Name: Police Car N_4 FL Tire
+  m_Name: Police Car N_4 BR Tire
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &1972836016918151776
+--- !u!4 &8710463539488146197
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1805508402569820213}
+  m_GameObject: {fileID: 1265217852557308384}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -0.8214569, y: 0.37594604, z: 1.3011703}
+  m_LocalPosition: {x: 0.8214569, y: 0.37594604, z: -1.3008537}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 5412456363510082317}
+  m_Father: {fileID: 6004372226040766609}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!33 &5676389648290604594
+--- !u!33 &784017736521475447
 MeshFilter:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1805508402569820213}
-  m_Mesh: {fileID: -8243889979684123348, guid: ddae4734f30aef14f89e7635cc5d153c, type: 3}
---- !u!23 &7904666324964624432
+  m_GameObject: {fileID: 1265217852557308384}
+  m_Mesh: {fileID: -5507537352490012378, guid: ddae4734f30aef14f89e7635cc5d153c, type: 3}
+--- !u!23 &5486237641618709739
 MeshRenderer:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1805508402569820213}
+  m_GameObject: {fileID: 1265217852557308384}
   m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 1
@@ -160,7 +160,7 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!1 &2204536743900822373
+--- !u!1 &2635701655313523126
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -168,9 +168,99 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 5412456363510082317}
-  - component: {fileID: 227402251142872118}
-  - component: {fileID: 3210234905716541308}
+  - component: {fileID: 6090189620902160822}
+  - component: {fileID: 6028409460007923492}
+  - component: {fileID: 4146777465843017724}
+  m_Layer: 0
+  m_Name: Police Car N_4 FR Tire
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &6090189620902160822
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2635701655313523126}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0.8214569, y: 0.37594604, z: 1.3011703}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 6004372226040766609}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!33 &6028409460007923492
+MeshFilter:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2635701655313523126}
+  m_Mesh: {fileID: -4105745260394673852, guid: ddae4734f30aef14f89e7635cc5d153c, type: 3}
+--- !u!23 &4146777465843017724
+MeshRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2635701655313523126}
+  m_Enabled: 1
+  m_CastShadows: 1
+  m_ReceiveShadows: 1
+  m_DynamicOccludee: 1
+  m_StaticShadowCaster: 0
+  m_MotionVectors: 1
+  m_LightProbeUsage: 1
+  m_ReflectionProbeUsage: 1
+  m_RayTracingMode: 2
+  m_RayTraceProcedural: 0
+  m_RayTracingAccelStructBuildFlagsOverride: 0
+  m_RayTracingAccelStructBuildFlags: 1
+  m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
+  m_RenderingLayerMask: 1
+  m_RendererPriority: 0
+  m_Materials:
+  - {fileID: 2100000, guid: 9e5c2501cc427b34daa59f785d2892c2, type: 2}
+  m_StaticBatchInfo:
+    firstSubMesh: 0
+    subMeshCount: 0
+  m_StaticBatchRoot: {fileID: 0}
+  m_ProbeAnchor: {fileID: 0}
+  m_LightProbeVolumeOverride: {fileID: 0}
+  m_ScaleInLightmap: 1
+  m_ReceiveGI: 1
+  m_PreserveUVs: 0
+  m_IgnoreNormalsForChartDetection: 0
+  m_ImportantGI: 0
+  m_StitchLightmapSeams: 1
+  m_SelectedEditorRenderState: 3
+  m_MinimumChartSize: 4
+  m_AutoUVMaxDistance: 0.5
+  m_AutoUVMaxAngle: 89
+  m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
+  m_SortingLayerID: 0
+  m_SortingLayer: 0
+  m_SortingOrder: 0
+  m_MaskInteraction: 0
+  m_AdditionalVertexStreams: {fileID: 0}
+--- !u!1 &3574045872164547919
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 6004372226040766609}
+  - component: {fileID: 6772161057962092991}
+  - component: {fileID: 4614991938192669455}
   m_Layer: 0
   m_Name: VisualModel
   m_TagString: Untagged
@@ -178,40 +268,40 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &5412456363510082317
+--- !u!4 &6004372226040766609
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2204536743900822373}
+  m_GameObject: {fileID: 3574045872164547919}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 0.38, y: 0.38, z: 0.38}
   m_ConstrainProportionsScale: 0
   m_Children:
-  - {fileID: 7856492938972206280}
-  - {fileID: 423891791022650327}
-  - {fileID: 1972836016918151776}
-  - {fileID: 3944068055249861072}
+  - {fileID: 9218182565528373061}
+  - {fileID: 8710463539488146197}
+  - {fileID: 440905756890006879}
+  - {fileID: 6090189620902160822}
   m_Father: {fileID: 2000000000000001}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!33 &227402251142872118
+--- !u!33 &6772161057962092991
 MeshFilter:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2204536743900822373}
+  m_GameObject: {fileID: 3574045872164547919}
   m_Mesh: {fileID: -3670072627025139295, guid: ddae4734f30aef14f89e7635cc5d153c, type: 3}
---- !u!23 &3210234905716541308
+--- !u!23 &4614991938192669455
 MeshRenderer:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2204536743900822373}
+  m_GameObject: {fileID: 3574045872164547919}
   m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 1
@@ -255,7 +345,7 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!1 &3858700193685539476
+--- !u!1 &6300565992085487783
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -263,46 +353,46 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 3944068055249861072}
-  - component: {fileID: 4046097265674588860}
-  - component: {fileID: 8141032002044070415}
+  - component: {fileID: 440905756890006879}
+  - component: {fileID: 9017939715480138719}
+  - component: {fileID: 1635962523796276427}
   m_Layer: 0
-  m_Name: Police Car N_4 FR Tire
+  m_Name: Police Car N_4 FL Tire
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &3944068055249861072
+--- !u!4 &440905756890006879
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3858700193685539476}
+  m_GameObject: {fileID: 6300565992085487783}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0.8214569, y: 0.37594604, z: 1.3011703}
+  m_LocalPosition: {x: -0.8214569, y: 0.37594604, z: 1.3011703}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 5412456363510082317}
+  m_Father: {fileID: 6004372226040766609}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!33 &4046097265674588860
+--- !u!33 &9017939715480138719
 MeshFilter:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3858700193685539476}
-  m_Mesh: {fileID: -4105745260394673852, guid: ddae4734f30aef14f89e7635cc5d153c, type: 3}
---- !u!23 &8141032002044070415
+  m_GameObject: {fileID: 6300565992085487783}
+  m_Mesh: {fileID: -8243889979684123348, guid: ddae4734f30aef14f89e7635cc5d153c, type: 3}
+--- !u!23 &1635962523796276427
 MeshRenderer:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3858700193685539476}
+  m_GameObject: {fileID: 6300565992085487783}
   m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 1
@@ -345,7 +435,7 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!1 &6579716061710041925
+--- !u!1 &7808456021303518404
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -353,99 +443,9 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 423891791022650327}
-  - component: {fileID: 3366047789354538713}
-  - component: {fileID: 6315807435981821198}
-  m_Layer: 0
-  m_Name: Police Car N_4 BR Tire
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &423891791022650327
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6579716061710041925}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0.8214569, y: 0.37594604, z: -1.3008537}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 5412456363510082317}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!33 &3366047789354538713
-MeshFilter:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6579716061710041925}
-  m_Mesh: {fileID: -5507537352490012378, guid: ddae4734f30aef14f89e7635cc5d153c, type: 3}
---- !u!23 &6315807435981821198
-MeshRenderer:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6579716061710041925}
-  m_Enabled: 1
-  m_CastShadows: 1
-  m_ReceiveShadows: 1
-  m_DynamicOccludee: 1
-  m_StaticShadowCaster: 0
-  m_MotionVectors: 1
-  m_LightProbeUsage: 1
-  m_ReflectionProbeUsage: 1
-  m_RayTracingMode: 2
-  m_RayTraceProcedural: 0
-  m_RayTracingAccelStructBuildFlagsOverride: 0
-  m_RayTracingAccelStructBuildFlags: 1
-  m_SmallMeshCulling: 1
-  m_ForceMeshLod: -1
-  m_MeshLodSelectionBias: 0
-  m_RenderingLayerMask: 1
-  m_RendererPriority: 0
-  m_Materials:
-  - {fileID: 2100000, guid: 9e5c2501cc427b34daa59f785d2892c2, type: 2}
-  m_StaticBatchInfo:
-    firstSubMesh: 0
-    subMeshCount: 0
-  m_StaticBatchRoot: {fileID: 0}
-  m_ProbeAnchor: {fileID: 0}
-  m_LightProbeVolumeOverride: {fileID: 0}
-  m_ScaleInLightmap: 1
-  m_ReceiveGI: 1
-  m_PreserveUVs: 0
-  m_IgnoreNormalsForChartDetection: 0
-  m_ImportantGI: 0
-  m_StitchLightmapSeams: 1
-  m_SelectedEditorRenderState: 3
-  m_MinimumChartSize: 4
-  m_AutoUVMaxDistance: 0.5
-  m_AutoUVMaxAngle: 89
-  m_LightmapParameters: {fileID: 0}
-  m_GlobalIlluminationMeshLod: 0
-  m_SortingLayerID: 0
-  m_SortingLayer: 0
-  m_SortingOrder: 0
-  m_MaskInteraction: 0
-  m_AdditionalVertexStreams: {fileID: 0}
---- !u!1 &6663498430940383281
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 7856492938972206280}
-  - component: {fileID: 5161216526757599568}
-  - component: {fileID: 2693912810516252893}
+  - component: {fileID: 9218182565528373061}
+  - component: {fileID: 646070528948183079}
+  - component: {fileID: 770536761501085606}
   m_Layer: 0
   m_Name: Police Car N_4 BL Tire
   m_TagString: Untagged
@@ -453,36 +453,36 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &7856492938972206280
+--- !u!4 &9218182565528373061
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6663498430940383281}
+  m_GameObject: {fileID: 7808456021303518404}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: -0.8214569, y: 0.37594604, z: -1.3008537}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 5412456363510082317}
+  m_Father: {fileID: 6004372226040766609}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!33 &5161216526757599568
+--- !u!33 &646070528948183079
 MeshFilter:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6663498430940383281}
+  m_GameObject: {fileID: 7808456021303518404}
   m_Mesh: {fileID: -7458926714669870354, guid: ddae4734f30aef14f89e7635cc5d153c, type: 3}
---- !u!23 &2693912810516252893
+--- !u!23 &770536761501085606
 MeshRenderer:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6663498430940383281}
+  m_GameObject: {fileID: 7808456021303518404}
   m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 1

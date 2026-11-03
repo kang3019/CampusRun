@@ -31,7 +31,9 @@ namespace CampusRun.Leaderboard
 
         [Header("--- 이름 입력 필드 컴포넌트 ---")]
         private InputField _nameInputField;
+        private Outline _inputOutline;
         private Text _inputPromptText;
+        private Text _inputWarningText;
         private int _pendingScore;
         private string _pendingGrade;
         private Action _onInputCompletedCallback;
@@ -40,6 +42,10 @@ namespace CampusRun.Leaderboard
         private Text _guideText;
         private bool _isInitialized = false;
         private bool _isSubmitting = false;
+        private int _lastSubmitAttemptFrame = -1;
+
+        private static readonly Color DefaultInputOutlineColor = new Color(0.4f, 0.7f, 1f);
+        private static readonly Color WarningInputOutlineColor = new Color(1f, 0.32f, 0.32f);
 
         private void Awake()
         {
@@ -98,7 +104,7 @@ namespace CampusRun.Leaderboard
                 ToggleLeaderboard();
             }
 
-            // 이름 입력 모달이 열려 있을 때 Enter 키 누르면 즉시 저장
+            // 이름 입력 모달이 열려 있을 때 Enter 키 누르면 즉시 저장 시도
             if (_nameInputModal != null && _nameInputModal.activeSelf && !_isSubmitting)
             {
                 if (keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame)
@@ -398,7 +404,7 @@ namespace CampusRun.Leaderboard
             GameObject promptObj = new GameObject("Prompt_Text");
             promptObj.transform.SetParent(boxObj.transform, false);
             RectTransform promptRect = promptObj.AddComponent<RectTransform>();
-            promptRect.anchoredPosition = new Vector2(0f, 85f);
+            promptRect.anchoredPosition = new Vector2(0f, 88f);
             promptRect.sizeDelta = new Vector2(620f, 55f);
 
             _inputPromptText = promptObj.AddComponent<Text>();
@@ -412,18 +418,19 @@ namespace CampusRun.Leaderboard
             GameObject inputFieldObj = new GameObject("InputField");
             inputFieldObj.transform.SetParent(boxObj.transform, false);
             RectTransform inputRect = inputFieldObj.AddComponent<RectTransform>();
-            inputRect.anchoredPosition = new Vector2(0f, 0f);
+            inputRect.anchoredPosition = new Vector2(0f, 10f);
             inputRect.sizeDelta = new Vector2(420f, 60f);
 
             Image inputBg = inputFieldObj.AddComponent<Image>();
             inputBg.color = new Color(0.15f, 0.18f, 0.28f);
 
-            Outline inputOutline = inputFieldObj.AddComponent<Outline>();
-            inputOutline.effectColor = new Color(0.4f, 0.7f, 1f);
-            inputOutline.effectDistance = new Vector2(2f, -2f);
+            _inputOutline = inputFieldObj.AddComponent<Outline>();
+            _inputOutline.effectColor = DefaultInputOutlineColor;
+            _inputOutline.effectDistance = new Vector2(2f, -2f);
 
             _nameInputField = inputFieldObj.AddComponent<InputField>();
             _nameInputField.characterLimit = 0; // 한글 조합 중 자음/모음 잘림 방지 (등록 시 최대 8자로 정제)
+            _nameInputField.onValueChanged.AddListener(OnInputFieldValueChanged);
             _nameInputField.onEndEdit.AddListener(OnInputFieldEndEdit);
 
             // 텍스트 컴포넌트
@@ -460,11 +467,26 @@ namespace CampusRun.Leaderboard
             placeholderText.text = "닉네임 입력 (최대 8자)";
             _nameInputField.placeholder = placeholderText;
 
+            // 중복 이름 안내 경고 텍스트
+            GameObject warningObj = new GameObject("Warning_Text");
+            warningObj.transform.SetParent(boxObj.transform, false);
+            RectTransform warningRect = warningObj.AddComponent<RectTransform>();
+            warningRect.anchoredPosition = new Vector2(0f, -45f);
+            warningRect.sizeDelta = new Vector2(640f, 36f);
+
+            _inputWarningText = warningObj.AddComponent<Text>();
+            _inputWarningText.font = _pixelFont;
+            _inputWarningText.fontSize = 19;
+            _inputWarningText.fontStyle = FontStyle.Bold;
+            _inputWarningText.alignment = TextAnchor.MiddleCenter;
+            _inputWarningText.color = new Color(1f, 0.38f, 0.38f);
+            _inputWarningText.text = string.Empty;
+
             // 등록 버튼
             GameObject submitBtnObj = new GameObject("Submit_Button");
             submitBtnObj.transform.SetParent(boxObj.transform, false);
             RectTransform submitBtnRect = submitBtnObj.AddComponent<RectTransform>();
-            submitBtnRect.anchoredPosition = new Vector2(0f, -110f);
+            submitBtnRect.anchoredPosition = new Vector2(0f, -115f);
             submitBtnRect.sizeDelta = new Vector2(280f, 60f);
 
             Image submitImg = submitBtnObj.AddComponent<Image>();
@@ -625,11 +647,19 @@ namespace CampusRun.Leaderboard
             _pendingGrade = grade;
             _onInputCompletedCallback = onCompleted;
 
+            // 모달 열릴 때 최신 Firebase 랭킹과 동기화
+            if (LeaderboardManager.Instance != null && LeaderboardManager.Instance.IsFirebaseConfigured)
+            {
+                LeaderboardManager.Instance.RefreshFromFirebase();
+            }
+
             int rank = LeaderboardManager.Instance?.GetProjectedRank(score) ?? 1;
             if (_inputPromptText != null)
             {
                 _inputPromptText.text = $"최종 기록: {score}m ({grade})  ➔  예상 순위: <color=#FFD700>{rank}위</color>!";
             }
+
+            ClearInputWarning();
 
             if (_nameInputField != null)
             {
@@ -644,11 +674,45 @@ namespace CampusRun.Leaderboard
             }
         }
 
+        private void OnInputFieldValueChanged(string newText)
+        {
+            if (!_isSubmitting)
+            {
+                ClearInputWarning();
+            }
+        }
+
+        private void ClearInputWarning()
+        {
+            if (_inputWarningText != null)
+            {
+                _inputWarningText.text = string.Empty;
+            }
+            if (_inputOutline != null)
+            {
+                _inputOutline.effectColor = DefaultInputOutlineColor;
+            }
+        }
+
+        private void ShowInputWarning(string message)
+        {
+            if (_inputWarningText != null)
+            {
+                _inputWarningText.text = message;
+            }
+            if (_inputOutline != null)
+            {
+                _inputOutline.effectColor = WarningInputOutlineColor;
+            }
+        }
+
         /// <summary>
         /// InputField에서 편집 완료 이벤트 발생 시 호출됩니다.
         /// </summary>
         private void OnInputFieldEndEdit(string text)
         {
+            if (_isSubmitting) return;
+
             var keyboard = Keyboard.current;
             if (keyboard != null && (keyboard.enterKey.isPressed || keyboard.numpadEnterKey.isPressed || keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame))
             {
@@ -661,7 +725,9 @@ namespace CampusRun.Leaderboard
         /// </summary>
         public void OnSubmitNameClicked()
         {
-            if (_isSubmitting) return;
+            if (_isSubmitting || _lastSubmitAttemptFrame == Time.frameCount) return;
+            _lastSubmitAttemptFrame = Time.frameCount;
+            _isSubmitting = true;
 
             string text = string.Empty;
             if (_nameInputField != null)
@@ -685,19 +751,31 @@ namespace CampusRun.Leaderboard
         }
 
         /// <summary>
-        /// 입력된 닉네임을 최대 8자로 안전하게 정제 후 랭킹에 등록합니다.
+        /// 입력된 닉네임을 최대 8자로 안전하게 정제 후 중복 여부를 검사하고 랭킹에 등록합니다.
         /// </summary>
         private void SubmitName(string rawName)
         {
-            if (_isSubmitting) return;
-            _isSubmitting = true;
-
             string name = !string.IsNullOrWhiteSpace(rawName) ? rawName.Trim() : "익명의 러너";
             if (name.Length > 8)
             {
                 name = name.Substring(0, 8);
             }
 
+            // 현재 TOP 5 랭킹에 동일한 이름이 이미 등록되어 있는지 확인
+            if (LeaderboardManager.Instance != null && LeaderboardManager.Instance.IsDuplicateName(name))
+            {
+                _isSubmitting = false;
+                ShowInputWarning($"'{name}'은(는) 이미 등록된 이름입니다! 다른 이름을 입력해 주세요.");
+
+                if (_nameInputField != null)
+                {
+                    _nameInputField.Select();
+                    _nameInputField.ActivateInputField();
+                }
+                return;
+            }
+
+            ClearInputWarning();
             LeaderboardManager.Instance?.AddEntry(name, _pendingScore, _pendingGrade);
 
             if (_nameInputModal != null)

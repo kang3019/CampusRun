@@ -35,7 +35,7 @@ namespace CampusRun.EditorTools
         private const string MatGrassPath = MaterialsDir + "/M_Grass_Vibrant.mat";
         private const string MatBoundaryToneDownPath = MaterialsDir + "/M_Boundary_ToneDown.mat";
 
-        private const string PrefsKey = "CampusRun_KoreanStreetSetup_Executed_v15";
+        private const string PrefsKey = "CampusRun_KoreanStreetSetup_Executed_v20";
 
         // 프리팹 경로
         private const string SafeLanePrefabPath = PrefabsEnvDir + "/PF_SafeLane.prefab";
@@ -95,7 +95,7 @@ namespace CampusRun.EditorTools
             }
         }
 
-        [MenuItem("CampusRun/트랙 좌우 톤다운 경계 세팅 (Clean Tone-Down)")]
+        [MenuItem("CampusRun/트랙 좌우 화단(잔디) 및 연석 턱 경계 세팅")]
         public static void SetupTrackBoundariesAndWaterBuoys()
         {
             SetupKoreanStreetTheme();
@@ -779,7 +779,7 @@ namespace CampusRun.EditorTools
                 "ConstructionCurbs",
                 "RoadGuardrails",
                 "SidewalkBorders",
-                "ToneDown_Boundaries"
+                "ToneDown_Boundaries", "PlanterCurb_Boundaries", "Natural_Boundaries_V2", "Natural_Boundaries_V3", "Natural_Boundaries_V4", "Natural_Boundaries_V5"
             };
 
             foreach (string t in targets)
@@ -794,7 +794,24 @@ namespace CampusRun.EditorTools
 
         private static void ApplyToneDownBoundary(GameObject laneRoot, Material matToneDown)
         {
-            if (matToneDown == null) return;
+            Material matCurb = AssetDatabase.LoadAssetAtPath<Material>(MatCurbPath);
+            Material matGrass = AssetDatabase.LoadAssetAtPath<Material>(MatGrassPath);
+            Material matWhite = AssetDatabase.LoadAssetAtPath<Material>(MatCrosswalkWhitePath);
+            string innerWaterMatPath = MaterialsDir + "/M_Water_Inner.mat";
+            Material matInnerWater = AssetDatabase.LoadAssetAtPath<Material>(innerWaterMatPath);
+            if (matInnerWater == null)
+            {
+                Material baseWater = AssetDatabase.LoadAssetAtPath<Material>(MatWaterPath);
+                matInnerWater = baseWater != null ? new Material(baseWater) : new Material(Shader.Find("Universal Render Pipeline/Lit"));
+                AssetDatabase.CreateAsset(matInnerWater, innerWaterMatPath);
+            }
+            Color brightWaterColor = new Color(0.19f, 0.61f, 0.81f, 1f);
+            matInnerWater.color = brightWaterColor;
+            if (matInnerWater.HasProperty("_BaseColor")) matInnerWater.SetColor("_BaseColor", brightWaterColor);
+            if (matInnerWater.HasProperty("_Color")) matInnerWater.SetColor("_Color", brightWaterColor);
+            EditorUtility.SetDirty(matInnerWater);
+            BaseLane.BuildPlanterCurbBoundaryForLane(laneRoot, matCurb, matGrass, matWhite, matInnerWater);
+            if (matToneDown == null || matCurb != null) return;
 
             Vector3 parentScale = laneRoot.transform.localScale;
 

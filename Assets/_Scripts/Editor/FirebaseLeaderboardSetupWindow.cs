@@ -6,7 +6,7 @@ using UnityEngine;
 using UnityEngine.Networking;
 using CampusRun.Leaderboard;
 
-namespace CampusRun.Editor
+namespace CampusRun.EditorTools
 {
     /// <summary>
     /// Unity 에디터 상단 메뉴(CampusRun/Firebase 랭킹 연동 설정)에서

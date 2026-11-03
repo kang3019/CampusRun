@@ -22,10 +22,10 @@ namespace CampusRun.Audio
         [SerializeField] private float _hopVolume = 1.0f;
 
         [Tooltip("점프 사운드 피치 최소값 (툭 소리)")]
-        [SerializeField] private float _hopPitchMin = 0.93f;
+        [SerializeField] private float _hopPitchMin = 1.02f;
 
         [Tooltip("점프 사운드 피치 최대값 (톡 소리)")]
-        [SerializeField] private float _hopPitchMax = 1.07f;
+        [SerializeField] private float _hopPitchMax = 1.18f;
 
         [Header("--- 2. 통나무 착지 효과음 ---")]
         [Tooltip("통나무/부유판 착지 사운드 (wood1.wav)")]
@@ -96,6 +96,18 @@ namespace CampusRun.Audio
         private AudioClip _proceduralHitClip;
         private AudioClip _proceduralSplashClip;
         private AudioClip _proceduralWarningClip;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetAudioManagerStaticState()
+        {
+            ResetStaticState();
+        }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        private static void ResetAudioManagerBeforeSceneLoad()
+        {
+            ResetShutdownFlag();
+        }
 
         protected override void Awake()
         {
@@ -295,7 +307,7 @@ namespace CampusRun.Audio
             }
 
             // 경쾌하게 튀는 통통(통통/톡) 도약 사운드
-            float randomPitch = Random.Range(1.02f, 1.18f);
+            float randomPitch = Random.Range(_hopPitchMin, _hopPitchMax);
             PlaySFX(clipToPlay, 1.20f * _hopVolume, randomPitch);
         }
 

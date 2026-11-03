@@ -47,16 +47,13 @@ namespace CampusRun.Core
             }
         }
 
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetStaticState()
+        /// <summary>
+        /// 도메인 리로드 비활성화 환경 등에서 정적 상태를 초기화합니다.
+        /// (제네릭 클래스 내부에는 [RuntimeInitializeOnLoadMethod]를 직접 선언할 수 없으므로 파생 클래스에서 호출)
+        /// </summary>
+        public static void ResetStaticState()
         {
             _instance = null;
-            _isShuttingDown = false;
-        }
-
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
-        private static void ResetBeforeSceneLoad()
-        {
             _isShuttingDown = false;
         }
 

@@ -538,6 +538,28 @@ namespace CampusRun.Leaderboard
         }
 
         /// <summary>
+        /// 입력한 닉네임이 현재 TOP 5 랭킹에 이미 등록되어 있는지 확인합니다 (앞뒤 공백 제거 및 대소문자 무시).
+        /// </summary>
+        public bool IsDuplicateName(string playerName)
+        {
+            if (string.IsNullOrWhiteSpace(playerName)) return false;
+            if (_data == null || _data.entries == null) return false;
+
+            string normalized = playerName.Trim();
+            for (int i = 0; i < _data.entries.Count; i++)
+            {
+                string existing = _data.entries[i].playerName;
+                if (!string.IsNullOrWhiteSpace(existing) &&
+                    string.Equals(existing.Trim(), normalized, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// 새로운 랭킹 기록을 추가하고 내림차순 정렬 후 상위 5개를 로컬 및 Firebase에 저장합니다.
         /// </summary>
         public void AddEntry(string playerName, int score, string grade)
