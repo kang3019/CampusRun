@@ -24,7 +24,7 @@ namespace CampusRun.EditorTools
         {
             try
             {
-                Assembly editorAssembly = typeof(Editor).Assembly;
+                Assembly editorAssembly = typeof(UnityEditor.Editor).Assembly;
                 Type gameViewSizesType = editorAssembly.GetType("UnityEditor.GameViewSizes");
                 if (gameViewSizesType == null) return;
 

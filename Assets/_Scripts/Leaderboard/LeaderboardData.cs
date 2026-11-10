@@ -48,4 +48,14 @@ namespace CampusRun.Leaderboard
             return data;
         }
     }
+
+    /// <summary>
+    /// Resources/FirebaseConfig.json 에서 로드되는 Firebase Realtime Database 설정 모델입니다.
+    /// </summary>
+    [Serializable]
+    public class FirebaseConfig
+    {
+        public string databaseUrl = "";
+        public bool enableFirebase = true;
+    }
 }

@@ -22,10 +22,10 @@ namespace CampusRun.Audio
         [SerializeField] private float _hopVolume = 1.0f;
 
         [Tooltip("점프 사운드 피치 최소값 (툭 소리)")]
-        [SerializeField] private float _hopPitchMin = 0.93f;
+        [SerializeField] private float _hopPitchMin = 1.02f;
 
         [Tooltip("점프 사운드 피치 최대값 (톡 소리)")]
-        [SerializeField] private float _hopPitchMax = 1.07f;
+        [SerializeField] private float _hopPitchMax = 1.18f;
 
         [Header("--- 2. 통나무 디딤 효과음 ---")]
         [Tooltip("통나무/부유판 디딤 나무 노크 사운드 (wood1.wav)")]
@@ -128,7 +128,13 @@ namespace CampusRun.Audio
         private AudioClip _proceduralWarningClip;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetStaticOnDomainReloadDisabled()
+        private static void ResetAudioManagerStaticState()
+        {
+            ResetStaticState();
+        }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        private static void ResetAudioManagerBeforeSceneLoad()
         {
             ResetShutdownFlag();
         }
