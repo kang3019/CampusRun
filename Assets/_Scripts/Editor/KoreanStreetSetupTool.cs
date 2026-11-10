@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using UnityEngine;
 using UnityEditor;
 using CampusRun.Obstacles;
@@ -428,12 +428,11 @@ namespace CampusRun.EditorTools
             float invX = 1f / 60f;
             float invY = 1f / 0.2f;
 
-            // [사용자 요청] 횡단보도(사선/잔선)는 완전 제거!
-            // 통일했던 그 일정한 일자 작대기 페인트(Dash Line)의 다채로운 랜덤 패턴 그룹 5종 구축
-
-            // --- 패턴 1: 기본 일자 점선 (Standard Dashes, 3.6m 등간격) ---
+            // 길건너 친구들 원작 스타일:
+            // 연속된 차도(2차선 이상) 사이의 경계선(localZ = +0.5f)에만 표시할 단일 표준 흰색 점선(3.6m 등간격, 1.6m 길이) 구축
             GameObject patternStandard = new GameObject("DashPattern_Standard");
             patternStandard.transform.SetParent(roadRoot.transform, false);
+            patternStandard.transform.localPosition = new Vector3(0f, 0f, 0.5f);
             float[] standardX = new float[] { -25.2f, -21.6f, -18f, -14.4f, -10.8f, -7.2f, -3.6f, 0f, 3.6f, 7.2f, 10.8f, 14.4f, 18f, 21.6f, 25.2f };
             foreach (float wx in standardX)
             {
@@ -441,57 +440,7 @@ namespace CampusRun.EditorTools
                     new Vector3(wx * invX, 0.515f, 0f),
                     new Vector3(1.6f * invX, 0.03f * invY, 0.15f));
             }
-            patternStandard.SetActive(true);
-
-            // --- 패턴 2: 넓은 간격 띄엄 점선 (Sparse Dashes, 7.2m 간격) ---
-            GameObject patternSparse = new GameObject("DashPattern_Sparse");
-            patternSparse.transform.SetParent(roadRoot.transform, false);
-            float[] sparseX = new float[] { -25.2f, -18f, -10.8f, -3.6f, 3.6f, 10.8f, 18f, 25.2f };
-            foreach (float wx in sparseX)
-            {
-                CreateFloorDecorationCube($"Dash_Sp_{wx:F1}", patternSparse.transform, matRoadMarking,
-                    new Vector3(wx * invX, 0.515f, 0f),
-                    new Vector3(1.6f * invX, 0.03f * invY, 0.15f));
-            }
-            patternSparse.SetActive(false);
-
-            // --- 패턴 3: 긴 호흡 일자 점선 (Long Dashes, 5.4m 간격, 2.8m 길이) ---
-            GameObject patternLong = new GameObject("DashPattern_Long");
-            patternLong.transform.SetParent(roadRoot.transform, false);
-            float[] longX = new float[] { -24.3f, -18.9f, -13.5f, -8.1f, -2.7f, 2.7f, 8.1f, 13.5f, 18.9f, 24.3f };
-            foreach (float wx in longX)
-            {
-                CreateFloorDecorationCube($"Dash_Lg_{wx:F1}", patternLong.transform, matRoadMarking,
-                    new Vector3(wx * invX, 0.515f, 0f),
-                    new Vector3(2.8f * invX, 0.03f * invY, 0.15f));
-            }
-            patternLong.SetActive(false);
-
-            // --- 패턴 4: 더블 일자 점선 / 이중선 (Double Dashes, Z=±0.08m) ---
-            GameObject patternDouble = new GameObject("DashPattern_Double");
-            patternDouble.transform.SetParent(roadRoot.transform, false);
-            foreach (float wx in standardX)
-            {
-                CreateFloorDecorationCube($"Dash_D1_{wx:F1}", patternDouble.transform, matRoadMarking,
-                    new Vector3(wx * invX, 0.515f, -0.08f),
-                    new Vector3(1.6f * invX, 0.03f * invY, 0.10f));
-                CreateFloorDecorationCube($"Dash_D2_{wx:F1}", patternDouble.transform, matRoadMarking,
-                    new Vector3(wx * invX, 0.515f, 0.08f),
-                    new Vector3(1.6f * invX, 0.03f * invY, 0.10f));
-            }
-            patternDouble.SetActive(false);
-
-            // --- 패턴 5: 촘촘한 짧은 일자 점선 (Dense Dashes, 2.4m 간격, 1.1m 길이) ---
-            GameObject patternDense = new GameObject("DashPattern_Dense");
-            patternDense.transform.SetParent(roadRoot.transform, false);
-            float[] denseX = new float[] { -26.4f, -24.0f, -21.6f, -19.2f, -16.8f, -14.4f, -12.0f, -9.6f, -7.2f, -4.8f, -2.4f, 0f, 2.4f, 4.8f, 7.2f, 9.6f, 12.0f, 14.4f, 16.8f, 19.2f, 21.6f, 24.0f, 26.4f };
-            foreach (float wx in denseX)
-            {
-                CreateFloorDecorationCube($"Dash_Dn_{wx:F1}", patternDense.transform, matRoadMarking,
-                    new Vector3(wx * invX, 0.515f, 0f),
-                    new Vector3(1.1f * invX, 0.03f * invY, 0.15f));
-            }
-            patternDense.SetActive(false);
+            patternStandard.SetActive(false);
 
             RoadLane roadScript = roadRoot.GetComponent<RoadLane>();
             if (roadScript != null)
@@ -503,12 +452,8 @@ namespace CampusRun.EditorTools
                 SerializedProperty patternListProp = so.FindProperty("_dashPatternGroups");
                 if (patternListProp != null)
                 {
-                    patternListProp.arraySize = 5;
+                    patternListProp.arraySize = 1;
                     patternListProp.GetArrayElementAtIndex(0).objectReferenceValue = patternStandard;
-                    patternListProp.GetArrayElementAtIndex(1).objectReferenceValue = patternSparse;
-                    patternListProp.GetArrayElementAtIndex(2).objectReferenceValue = patternLong;
-                    patternListProp.GetArrayElementAtIndex(3).objectReferenceValue = patternDouble;
-                    patternListProp.GetArrayElementAtIndex(4).objectReferenceValue = patternDense;
                 }
 
                 so.ApplyModifiedProperties();
@@ -516,7 +461,7 @@ namespace CampusRun.EditorTools
 
             PrefabUtility.SaveAsPrefabAsset(roadRoot, RoadLanePrefabPath);
             PrefabUtility.UnloadPrefabContents(roadRoot);
-            Debug.Log("[KoreanStreetSetupTool] PF_RoadLane.prefab 통일된 일자 페인트 5종 패턴 재구성 완료 (횡단보도 완전 제거)!");
+            Debug.Log("[KoreanStreetSetupTool] PF_RoadLane.prefab 연속 차도 경계용 단일 흰색 점선 재구성 완료!");
         }
 
         /// <summary>

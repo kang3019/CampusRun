@@ -37,6 +37,14 @@ namespace CampusRun.Track
         [Tooltip("연속으로 생성 가능한 최대 도로 레인 수 (난이도 조절)")]
         [SerializeField] private int _maxConsecutiveRoads = 3;
 
+        [Tooltip("5줄 이상 대형 연속 차도(고속도로 패턴)가 등장할 확률 (기본 0.10 = 10%)")]
+        [Range(0f, 1f)]
+        [SerializeField] private float _highwaySpawnChance = 0.10f;
+
+        [Tooltip("대형 연속 차도 패턴의 최소/최대 차선 수 (기본 5~7줄 랜덤)")]
+        [SerializeField] private int _highwayMinLanes = 5;
+        [SerializeField] private int _highwayMaxLanes = 7;
+
         [Header("--- 배달 오토바이 기믹 설정 ---")]
         [Tooltip("오토바이 레인이 등장하기 시작하는 최소 Z 좌표 (기본 8 = 80m 맛보기 출현)")]
         [SerializeField] private int _motorcycleMinZ = 8;
@@ -92,7 +100,7 @@ namespace CampusRun.Track
                 _safeLanePool = new ObjectPool<SafeLane>(
                     createFunc: () => Instantiate(_safeLanePrefab, transform),
                     actionOnGet: (lane) => { },
-                    actionOnRelease: (lane) => lane.Recycle(),
+                    actionOnRelease: (lane) => { if (lane != null) lane.Recycle(); },
                     actionOnDestroy: (lane) => { if (lane != null) Destroy(lane.gameObject); },
                     defaultCapacity: 15,
                     maxSize: 40
@@ -104,7 +112,7 @@ namespace CampusRun.Track
                 _roadLanePool = new ObjectPool<RoadLane>(
                     createFunc: () => Instantiate(_roadLanePrefab, transform),
                     actionOnGet: (lane) => { },
-                    actionOnRelease: (lane) => lane.Recycle(),
+                    actionOnRelease: (lane) => { if (lane != null) lane.Recycle(); },
                     actionOnDestroy: (lane) => { if (lane != null) Destroy(lane.gameObject); },
                     defaultCapacity: 20,
                     maxSize: 60
@@ -116,7 +124,7 @@ namespace CampusRun.Track
                 _motorcycleLanePool = new ObjectPool<MotorcycleLane>(
                     createFunc: () => Instantiate(_motorcycleLanePrefab, transform),
                     actionOnGet: (lane) => { },
-                    actionOnRelease: (lane) => lane.Recycle(),
+                    actionOnRelease: (lane) => { if (lane != null) lane.Recycle(); },
                     actionOnDestroy: (lane) => { if (lane != null) Destroy(lane.gameObject); },
                     defaultCapacity: 5,
                     maxSize: 15
@@ -128,7 +136,7 @@ namespace CampusRun.Track
                 _waterLanePool = new ObjectPool<WaterLane>(
                     createFunc: () => Instantiate(_waterLanePrefab, transform),
                     actionOnGet: (lane) => { },
-                    actionOnRelease: (lane) => lane.Recycle(),
+                    actionOnRelease: (lane) => { if (lane != null) lane.Recycle(); },
                     actionOnDestroy: (lane) => { if (lane != null) Destroy(lane.gameObject); },
                     defaultCapacity: 6,
                     maxSize: 18
@@ -196,14 +204,17 @@ namespace CampusRun.Track
                     else
                     {
                         _currentWaterGroupLeft = 0;
-                        if (zIndex < 30)
+
+                        // 10% 확률(_highwaySpawnChance)로 5줄 이상(5~7줄 랜덤) 대형 연속 차도 패턴 등장
+                        if (Random.value < _highwaySpawnChance)
                         {
-                            // [초반 완벽 적응 구간]: 도로는 무조건 1칸 단독! (지나갈 수 있는 확실한 1차선 도로)
-                            _currentRoadGroupLeft = 1;
+                            int minLanes = Mathf.Max(5, _highwayMinLanes);
+                            int maxLanes = Mathf.Max(minLanes, _highwayMaxLanes);
+                            _currentRoadGroupLeft = Random.Range(minLanes, maxLanes + 1);
                         }
-                        else if (zIndex < 55)
+                        else if (zIndex < 35)
                         {
-                            // [중반 구간]: 도로 1~2칸
+                            // [초반/중반 구간]: 도로 1~2칸 (1차선 단독 도로와 2차선 연속 도로가 자연스럽게 교차 등장)
                             _currentRoadGroupLeft = Random.Range(1, 3);
                         }
                         else
@@ -233,7 +244,10 @@ namespace CampusRun.Track
             // 3. 도로 구간일 때
             if (_currentRoadGroupLeft > 0 && _roadLanePool != null)
             {
-                SpawnRoadLane(zIndex);
+                // 바로 다음 행(Z+1)에도 차도가 계속 이어지는 경우(2차선 이상 연속 차도)에만
+                // 현재 차도와 다음 차도 사이의 경계선에 흰색 점선을 표시합니다.
+                bool hasNextRoadLane = _currentRoadGroupLeft > 1;
+                SpawnRoadLane(zIndex, hasNextRoadLane);
                 _currentRoadGroupLeft--;
 
                 // 도로 묶음이 끝나면 다음 안전 쉼터 준비
@@ -258,13 +272,13 @@ namespace CampusRun.Track
             _activeLanes.Add(lane);
         }
 
-        private void SpawnRoadLane(int zIndex)
+        private void SpawnRoadLane(int zIndex, bool hasNextRoadLane = false)
         {
-            // 200m(zIndex >= _motorcycleMinZ) 이후 일정 확률로 오토바이 레인 스폰
+            // 일정 Z 이후 확률적으로 오토바이(급습 차량) 레인 스폰
             if (_motorcycleLanePrefab != null && _motorcycleLanePool != null &&
                 zIndex >= _motorcycleMinZ && Random.value < _motorcycleSpawnChance)
             {
-                SpawnMotorcycleLane(zIndex);
+                SpawnMotorcycleLane(zIndex, hasNextRoadLane);
                 return;
             }
 
@@ -275,15 +289,17 @@ namespace CampusRun.Track
 
             RoadLane lane = _roadLanePool.Get();
             lane.SetDesiredDirection(_lastRoadDirection);
+            lane.SetHasNextRoadLane(hasNextRoadLane);
             lane.Initialize(zIndex);
             _activeLanes.Add(lane);
         }
 
-        private void SpawnMotorcycleLane(int zIndex)
+        private void SpawnMotorcycleLane(int zIndex, bool hasNextRoadLane = false)
         {
             if (_motorcycleLanePool == null) return;
 
             MotorcycleLane lane = _motorcycleLanePool.Get();
+            lane.SetHasNextRoadLane(hasNextRoadLane);
             lane.Initialize(zIndex);
             _activeLanes.Add(lane);
         }
