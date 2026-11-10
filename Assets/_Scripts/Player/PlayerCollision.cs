@@ -1,5 +1,7 @@
 using UnityEngine;
 using CampusRun.Obstacles;
+using CampusRun.Audio;
+using CampusRun.Effects;
 
 namespace CampusRun.Player
 {
@@ -47,8 +49,43 @@ namespace CampusRun.Player
                     : _defaultDeathReason;
 
                 Debug.LogWarning($"[CampusRun] 충돌 발생! {reason} (충돌 오브젝트: {hitObject.name})");
+
+                // 차량(승용차, 트럭, 버스, 경찰차, 오토바이 등) 충돌 시 -> 끼이익! 쾅!! (carbreak.wav) 사운드 및 강력 진동
+                if (IsVehicle(hitObject, obstacleType))
+                {
+                    AudioManager.Instance.PlayCarBreakSound();
+                    CameraShake.ShakeOnCarCrash();
+                }
+                else
+                {
+                    AudioManager.Instance.PlayHitSound();
+                    CameraShake.ShakeOnHit();
+                }
+
+                // 충돌 시 파편 VFX 재생
+                ImpactVFXManager.PlayCrashDebris(transform.position);
+
                 _playerController.Die(reason);
             }
+        }
+
+        private bool IsVehicle(GameObject hitObject, string obstacleType)
+        {
+            if (hitObject.GetComponentInParent<MovingVehicle>() != null) return true;
+            if (hitObject.GetComponentInParent<FastMotorcycle>() != null) return true;
+
+            if (!string.IsNullOrEmpty(obstacleType))
+            {
+                string lower = obstacleType.ToLower();
+                if (lower.Contains("차") || lower.Contains("car") || lower.Contains("bus") ||
+                    lower.Contains("truck") || lower.Contains("트럭") || lower.Contains("버스") ||
+                    lower.Contains("오토바이") || lower.Contains("경찰"))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         /// <summary>

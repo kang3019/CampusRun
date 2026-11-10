@@ -29,10 +29,10 @@ namespace CampusRun.Track
         [SerializeField] private int _initialSafeLaneCount = 6;
 
         [Tooltip("플레이어 위치 기준 전방에 유지할 레인 거리")]
-        [SerializeField] private int _forwardViewDistance = 25;
+        [SerializeField] private int _forwardViewDistance = 16;
 
         [Tooltip("플레이어 위치 기준 후방에서 레인을 회수할 거리")]
-        [SerializeField] private int _backwardCullDistance = 10;
+        [SerializeField] private int _backwardCullDistance = 6;
 
         [Tooltip("연속으로 생성 가능한 최대 도로 레인 수 (난이도 조절)")]
         [SerializeField] private int _maxConsecutiveRoads = 3;
@@ -98,49 +98,87 @@ namespace CampusRun.Track
             if (_safeLanePrefab != null)
             {
                 _safeLanePool = new ObjectPool<SafeLane>(
-                    createFunc: () => Instantiate(_safeLanePrefab, transform),
+                    createFunc: () =>
+                    {
+                        SafeLane lane = Instantiate(_safeLanePrefab, transform);
+                        lane.gameObject.SetActive(false);
+                        return lane;
+                    },
                     actionOnGet: (lane) => { },
                     actionOnRelease: (lane) => { if (lane != null) lane.Recycle(); },
                     actionOnDestroy: (lane) => { if (lane != null) Destroy(lane.gameObject); },
-                    defaultCapacity: 15,
+                    defaultCapacity: 20,
                     maxSize: 40
                 );
+                PrewarmPool(_safeLanePool, 18);
             }
 
             if (_roadLanePrefab != null)
             {
                 _roadLanePool = new ObjectPool<RoadLane>(
-                    createFunc: () => Instantiate(_roadLanePrefab, transform),
+                    createFunc: () =>
+                    {
+                        RoadLane lane = Instantiate(_roadLanePrefab, transform);
+                        lane.gameObject.SetActive(false);
+                        return lane;
+                    },
                     actionOnGet: (lane) => { },
                     actionOnRelease: (lane) => { if (lane != null) lane.Recycle(); },
                     actionOnDestroy: (lane) => { if (lane != null) Destroy(lane.gameObject); },
                     defaultCapacity: 20,
                     maxSize: 60
                 );
+                PrewarmPool(_roadLanePool, 14);
             }
 
             if (_motorcycleLanePrefab != null)
             {
                 _motorcycleLanePool = new ObjectPool<MotorcycleLane>(
-                    createFunc: () => Instantiate(_motorcycleLanePrefab, transform),
+                    createFunc: () =>
+                    {
+                        MotorcycleLane lane = Instantiate(_motorcycleLanePrefab, transform);
+                        lane.gameObject.SetActive(false);
+                        return lane;
+                    },
                     actionOnGet: (lane) => { },
                     actionOnRelease: (lane) => { if (lane != null) lane.Recycle(); },
                     actionOnDestroy: (lane) => { if (lane != null) Destroy(lane.gameObject); },
                     defaultCapacity: 5,
                     maxSize: 15
                 );
+                PrewarmPool(_motorcycleLanePool, 4);
             }
 
             if (_waterLanePrefab != null)
             {
                 _waterLanePool = new ObjectPool<WaterLane>(
-                    createFunc: () => Instantiate(_waterLanePrefab, transform),
+                    createFunc: () =>
+                    {
+                        WaterLane lane = Instantiate(_waterLanePrefab, transform);
+                        lane.gameObject.SetActive(false);
+                        return lane;
+                    },
                     actionOnGet: (lane) => { },
                     actionOnRelease: (lane) => { if (lane != null) lane.Recycle(); },
                     actionOnDestroy: (lane) => { if (lane != null) Destroy(lane.gameObject); },
                     defaultCapacity: 6,
                     maxSize: 18
                 );
+                PrewarmPool(_waterLanePool, 4);
+            }
+        }
+
+        private static void PrewarmPool<T>(IObjectPool<T> pool, int count) where T : class
+        {
+            if (pool == null || count <= 0) return;
+            T[] temp = new T[count];
+            for (int i = 0; i < count; i++)
+            {
+                temp[i] = pool.Get();
+            }
+            for (int i = 0; i < count; i++)
+            {
+                if (temp[i] != null) pool.Release(temp[i]);
             }
         }
 

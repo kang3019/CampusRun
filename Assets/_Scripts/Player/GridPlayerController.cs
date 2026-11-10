@@ -96,12 +96,15 @@ namespace CampusRun.Player
         private Coroutine _drownCoroutine;
         private Coroutine _snatchCoroutine;
         private FloatingPlank _currentMountedPlank;
+        private bool _playedWoodSoundThisHop = false;
         private readonly Collider[] _obstacleCheckHits = new Collider[6];
 
         // 터치 및 스와이프 입력 감지 변수
         private Vector2 _touchStartPos;
         private bool _isSwiping = false;
         private const float MinSwipeDistance = 40f;
+
+        public static GridPlayerController Instance { get; private set; }
 
         public int CurrentGridX => _currentGridX;
         public int CurrentGridZ => _currentGridZ;
@@ -110,6 +113,8 @@ namespace CampusRun.Player
 
         private void Awake()
         {
+            Instance = this;
+
             if (_visualModelTransform == null && transform.childCount > 0)
             {
                 _visualModelTransform = transform.GetChild(0);
@@ -129,8 +134,19 @@ namespace CampusRun.Player
             _currentGridZ = Mathf.RoundToInt(transform.position.z / _gridSize);
             transform.position = new Vector3(_currentGridX * _gridSize, _groundSurfaceY, _currentGridZ * _gridSize);
 
-            // 오디오 매니저 기동 (씬에 프리팹이 없더라도 자동 기동)
-            _ = AudioManager.Instance;
+            // 오디오 매니저 기동 (플레이 모드일 때만 기동하여 에디터 백업 복원 중 가짜 오브젝트 생성 방지)
+            if (Application.isPlaying)
+            {
+                _ = AudioManager.Instance;
+            }
+        }
+
+        private void OnDestroy()
+        {
+            if (Instance == this)
+            {
+                Instance = null;
+            }
         }
 
         private void OnEnable()
@@ -382,6 +398,7 @@ namespace CampusRun.Player
             // 목표 위치 및 높이 계산 (통나무 위는 통나무 윗면, 일반 지상은 도로/인도 블럭 상단 표면 높이로 점프)
             Vector3 startPos = transform.position;
             float targetY = _groundSurfaceY;
+            bool isTargetPlank = false;
 
             Vector3 checkCenter = new Vector3(targetX * _gridSize, 0.25f, targetZ * _gridSize);
             int targetHits = Physics.OverlapSphereNonAlloc(checkCenter, 0.45f, _obstacleCheckHits);
@@ -393,6 +410,7 @@ namespace CampusRun.Player
                 if (plank != null)
                 {
                     targetY = plank.TopSurfaceY;
+                    isTargetPlank = true;
                     break;
                 }
             }
@@ -449,7 +467,18 @@ namespace CampusRun.Player
             }
 
             GameEvents.TriggerPlayerGridMoved(new Vector3Int(_currentGridX, 0, _currentGridZ));
-            GameEvents.TriggerPlayerHopStarted(new Vector3Int(_currentGridX, 0, _currentGridZ));
+
+            // 목표 지점이 통나무 위라면 일반 도약음 대신 통나무 디딤 사운드('통!/탁!')를 즉시 재생하여 중복/이질감 방지
+            if (isTargetPlank)
+            {
+                _playedWoodSoundThisHop = true;
+                AudioManager.Instance.PlayWoodPlankSound();
+            }
+            else
+            {
+                _playedWoodSoundThisHop = false;
+                GameEvents.TriggerPlayerHopStarted(new Vector3Int(_currentGridX, 0, _currentGridZ));
+            }
 
             // 점프 코루틴 실행
             if (_hopCoroutine != null) StopCoroutine(_hopCoroutine);
@@ -654,14 +683,21 @@ namespace CampusRun.Player
             {
                 _currentMountedPlank = foundPlank;
                 _currentMountedPlank.MountPlayer(this);
-                AudioManager.Instance.PlayWoodPlankSound();
+                if (!_playedWoodSoundThisHop)
+                {
+                    AudioManager.Instance.PlayWoodPlankSound();
+                }
+                _playedWoodSoundThisHop = false;
                 transform.position = new Vector3(transform.position.x, foundPlank.TopSurfaceY, transform.position.z);
                 return;
             }
 
+            _playedWoodSoundThisHop = false;
+
             // 2. 널판지가 없는데 거대 물웅덩이 레인에 떨어진 경우 -> 퐁당 익사 탈락
             if (isWaterGround)
             {
+                AudioManager.Instance.PlaySplashSound();
                 ImpactVFXManager.PlayWaterSplash(landedPos);
                 CameraShake.ShakeOnWaterSplash();
 
@@ -1048,6 +1084,7 @@ namespace CampusRun.Player
             _idleTimer = 0f;
             _hasMovedAtLeastOnce = false;
             _isWarningTriggered = false;
+            _playedWoodSoundThisHop = false;
             _isBoundaryWarningTriggered = false;
             GameEvents.TriggerInactivityWarning(false);
             GameEvents.TriggerBoundaryWarning(false, 0f, false);
