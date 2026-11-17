@@ -19,7 +19,7 @@ namespace CampusRun.Track
         [Tooltip("플레이어가 쉴 수 있는 안전지대 여부")]
         [SerializeField] protected bool _isSafeLane = false;
 
-        private const int BoundaryVersion = 5;
+        private const int BoundaryVersion = 6;
         private int _preparedBoundaryVersion = 0;
         private Transform _naturalBoundaryTransform;
 
@@ -92,7 +92,11 @@ namespace CampusRun.Track
             if (v5 != null)
             {
                 _naturalBoundaryTransform = v5;
-                if (GetComponent<WaterLane>() != null)
+                if (GetComponent<SafeLane>() != null)
+                {
+                    NormalizeSafeLaneCurbsAndGrass(gameObject, v5);
+                }
+                else if (GetComponent<WaterLane>() != null)
                 {
                     MeshRenderer[] renderers = v5.GetComponentsInChildren<MeshRenderer>(true);
                     for (int i = 0; i < renderers.Length; i++)
@@ -253,23 +257,25 @@ namespace CampusRun.Track
             if (isSafe)
             {
                 // 1. 안전 보도블록 레인:
-                // 전후방 연석(Curb_Front/Back: localY=0.52, scaleY=0.22, Z=±0.43~±0.50)과
-                // 100% 동일한 높이(localY=0.52, scaleY=0.22)로 맞추고, Z 범위를 -0.43~+0.43(scaleZ=0.86)으로 설정하여
-                // 교차 부위 단차 및 Z-fighting 겹침을 완벽히 제거합니다.
+                // 전후방 연석(Curb_Front/Back) 및 점자블록이 좌우 잔디밭까지 침범하지 않도록 중앙 인도 폭(-4.73m ~ +4.73m)으로 제한하고,
+                // 좌우 경계석(Curb_Step_Left/Right)과 잔디밭(Planter_Grass_Left/Right)의 Z 길이를 1.0f(전체 폭)로 꽉 채워
+                // 연속된 잔디 레인 사이에 띄엄띄엄 빈 공간(회색 틈)이 생기지 않도록 완전히 밀착시킵니다.
+                TrimCentralSidewalkDecorations(laneRoot.transform, invX);
+
                 CreateBoundaryBlock("Curb_Step_Left", container.transform, matCurb,
                     new Vector3(-4.80f * invX, 0.52f, 0f),
-                    new Vector3(0.14f * invX, 0.22f, 0.86f));
+                    new Vector3(0.14f * invX, 0.22f, 1.0f));
                 CreateBoundaryBlock("Curb_Step_Right", container.transform, matCurb,
                     new Vector3(4.80f * invX, 0.52f, 0f),
-                    new Vector3(0.14f * invX, 0.22f, 0.86f));
+                    new Vector3(0.14f * invX, 0.22f, 1.0f));
 
-                // 좌우 화단 잔디밭 (연석 틀 내부 Z=-0.43~+0.43에 깔끔하게 수납)
+                // 좌우 화단 잔디밭 (Z=-0.50~+0.50 전체 구간 100% 빈틈없이 연결)
                 CreateBoundaryBlock("Planter_Grass_Left", container.transform, matGrass,
-                    new Vector3(-17.435f * invX, 0.51f, 0f),
-                    new Vector3(25.13f * invX, 0.16f, 0.86f));
+                    new Vector3(-17.435f * invX, 0.045f, 0f),
+                    new Vector3(25.13f * invX, 1.15f, 1.0f));
                 CreateBoundaryBlock("Planter_Grass_Right", container.transform, matGrass,
-                    new Vector3(17.435f * invX, 0.51f, 0f),
-                    new Vector3(25.13f * invX, 0.16f, 0.86f));
+                    new Vector3(17.435f * invX, 0.045f, 0f),
+                    new Vector3(25.13f * invX, 1.15f, 1.0f));
             }
             else if (isWater)
             {
@@ -349,6 +355,77 @@ namespace CampusRun.Track
                         new Vector3((baseBoundaryX - odx) * invX, foamLocalY, -odz),
                         new Vector3(ods * invX, foamThicknessY, ods));
                 }
+            }
+        }
+
+        private static void TrimCentralSidewalkDecorations(Transform laneTransform, float invX)
+        {
+            if (laneTransform == null) return;
+            float centralWalkwayScaleX = 9.46f * invX;
+
+            Transform curbDecor = laneTransform.Find("CurbDecorations");
+            if (curbDecor != null)
+            {
+                Transform curbFront = curbDecor.Find("Curb_Front");
+                if (curbFront != null)
+                {
+                    Vector3 s = curbFront.localScale;
+                    curbFront.localScale = new Vector3(centralWalkwayScaleX, s.y, s.z);
+                }
+
+                Transform curbBack = curbDecor.Find("Curb_Back");
+                if (curbBack != null)
+                {
+                    Vector3 s = curbBack.localScale;
+                    curbBack.localScale = new Vector3(centralWalkwayScaleX, s.y, s.z);
+                }
+            }
+
+            Transform brailleGroup = laneTransform.Find("BrailleBlockGroup");
+            if (brailleGroup != null)
+            {
+                Transform brailleLine = brailleGroup.Find("Braille_Line");
+                if (brailleLine != null)
+                {
+                    Vector3 s = brailleLine.localScale;
+                    brailleLine.localScale = new Vector3(centralWalkwayScaleX, s.y, s.z);
+                }
+            }
+        }
+
+        private static void NormalizeSafeLaneCurbsAndGrass(GameObject laneRoot, Transform boundaryContainer)
+        {
+            if (laneRoot == null || boundaryContainer == null) return;
+
+            float invX = 1f / Mathf.Max(0.001f, laneRoot.transform.localScale.x);
+            TrimCentralSidewalkDecorations(laneRoot.transform, invX);
+
+            Transform stepL = boundaryContainer.Find("Curb_Step_Left");
+            if (stepL != null)
+            {
+                stepL.localPosition = new Vector3(-4.80f * invX, 0.52f, 0f);
+                stepL.localScale = new Vector3(0.14f * invX, 0.22f, 1.0f);
+            }
+
+            Transform stepR = boundaryContainer.Find("Curb_Step_Right");
+            if (stepR != null)
+            {
+                stepR.localPosition = new Vector3(4.80f * invX, 0.52f, 0f);
+                stepR.localScale = new Vector3(0.14f * invX, 0.22f, 1.0f);
+            }
+
+            Transform grassL = boundaryContainer.Find("Planter_Grass_Left");
+            if (grassL != null)
+            {
+                grassL.localPosition = new Vector3(-17.435f * invX, 0.045f, 0f);
+                grassL.localScale = new Vector3(25.13f * invX, 1.15f, 1.0f);
+            }
+
+            Transform grassR = boundaryContainer.Find("Planter_Grass_Right");
+            if (grassR != null)
+            {
+                grassR.localPosition = new Vector3(17.435f * invX, 0.045f, 0f);
+                grassR.localScale = new Vector3(25.13f * invX, 1.15f, 1.0f);
             }
         }
 

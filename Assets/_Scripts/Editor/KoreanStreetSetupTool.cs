@@ -285,6 +285,8 @@ namespace CampusRun.EditorTools
             GameObject curbGroup = new GameObject("CurbDecorations");
             curbGroup.transform.SetParent(safeRoot.transform, false);
 
+            float centralWalkwayScaleX = 9.46f / 60f;
+
             GameObject curbFront = GameObject.CreatePrimitive(PrimitiveType.Cube);
             curbFront.name = "Curb_Front";
             curbFront.transform.SetParent(curbGroup.transform, false);
@@ -293,7 +295,7 @@ namespace CampusRun.EditorTools
             mrFront.sharedMaterial = matCurb;
             mrFront.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             curbFront.transform.localPosition = new Vector3(0f, 0.52f, 0.465f);
-            curbFront.transform.localScale = new Vector3(1f, 0.22f, 0.07f);
+            curbFront.transform.localScale = new Vector3(centralWalkwayScaleX, 0.22f, 0.07f);
 
             GameObject curbBack = GameObject.CreatePrimitive(PrimitiveType.Cube);
             curbBack.name = "Curb_Back";
@@ -303,7 +305,7 @@ namespace CampusRun.EditorTools
             mrBack.sharedMaterial = matCurb;
             mrBack.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             curbBack.transform.localPosition = new Vector3(0f, 0.52f, -0.465f);
-            curbBack.transform.localScale = new Vector3(1f, 0.22f, 0.07f);
+            curbBack.transform.localScale = new Vector3(centralWalkwayScaleX, 0.22f, 0.07f);
 
             GameObject brailleGroup = new GameObject("BrailleBlockGroup");
             brailleGroup.transform.SetParent(safeRoot.transform, false);
@@ -316,7 +318,7 @@ namespace CampusRun.EditorTools
             mrBraille.sharedMaterial = matBraille;
             mrBraille.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             brailleLine.transform.localPosition = new Vector3(0f, 0.515f, 0.25f);
-            brailleLine.transform.localScale = new Vector3(1f, 0.06f, 0.25f);
+            brailleLine.transform.localScale = new Vector3(centralWalkwayScaleX, 0.06f, 0.25f);
 
             brailleGroup.SetActive(false);
 
