@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Pool;
 using CampusRun.Core;
@@ -143,8 +143,8 @@ namespace CampusRun.Effects
             _crashDebrisPool = new ObjectPool<ParticleSystem>(
                 createFunc: () => CreateParticleSystemInstance("CrashDebris_VFX", SetupCrashDebrisSettings, _crashDebrisPool),
                 actionOnGet: ps => { ps.Clear(true); ps.gameObject.SetActive(true); },
-                actionOnRelease: ps => { ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear); ps.Clear(true); ps.gameObject.SetActive(false); },
-                actionOnDestroy: ps => Destroy(ps.gameObject),
+                actionOnRelease: ps => { if (ps != null) { ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear); ps.Clear(true); ps.gameObject.SetActive(false); } },
+                actionOnDestroy: ps => { if (ps != null) Destroy(ps.gameObject); },
                 collectionCheck: false,
                 defaultCapacity: 5,
                 maxSize: 15
@@ -153,8 +153,8 @@ namespace CampusRun.Effects
             _waterSplashPool = new ObjectPool<ParticleSystem>(
                 createFunc: () => CreateParticleSystemInstance("WaterSplash_VFX", SetupWaterSplashSettings, _waterSplashPool),
                 actionOnGet: ps => { ps.Clear(true); ps.gameObject.SetActive(true); },
-                actionOnRelease: ps => { ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear); ps.Clear(true); ps.gameObject.SetActive(false); },
-                actionOnDestroy: ps => Destroy(ps.gameObject),
+                actionOnRelease: ps => { if (ps != null) { ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear); ps.Clear(true); ps.gameObject.SetActive(false); } },
+                actionOnDestroy: ps => { if (ps != null) Destroy(ps.gameObject); },
                 collectionCheck: false,
                 defaultCapacity: 5,
                 maxSize: 15
@@ -163,8 +163,8 @@ namespace CampusRun.Effects
             _dustPuffPool = new ObjectPool<ParticleSystem>(
                 createFunc: () => CreateParticleSystemInstance("DustPuff_VFX", SetupDustPuffSettings, _dustPuffPool),
                 actionOnGet: ps => { ps.Clear(true); ps.gameObject.SetActive(true); },
-                actionOnRelease: ps => { ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear); ps.Clear(true); ps.gameObject.SetActive(false); },
-                actionOnDestroy: ps => Destroy(ps.gameObject),
+                actionOnRelease: ps => { if (ps != null) { ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear); ps.Clear(true); ps.gameObject.SetActive(false); } },
+                actionOnDestroy: ps => { if (ps != null) Destroy(ps.gameObject); },
                 collectionCheck: false,
                 defaultCapacity: 10,
                 maxSize: 25

@@ -51,6 +51,8 @@ namespace CampusRun.Track
         private float _currentMaxClearWindow = 6.8f;
         private MovingVehicle _currentLaneVehiclePrefab;
         private Coroutine _spawnRoutine;
+        private Transform[] _dashChildren;
+        private bool _hasNextRoadLane = false;
 
         private struct ActiveVehicleInfo
         {
@@ -127,8 +129,6 @@ namespace CampusRun.Track
             return pool;
         }
 
-        private Transform[] _dashChildren;
-
         private void Awake()
         {
             _isSafeLane = false;
@@ -137,6 +137,11 @@ namespace CampusRun.Track
 
         private void CacheDashChildren()
         {
+            if (_standardDashesGroup == null && _dashPatternGroups != null && _dashPatternGroups.Length > 0)
+            {
+                _standardDashesGroup = _dashPatternGroups[0];
+            }
+
             if (_standardDashesGroup != null && _dashChildren == null)
             {
                 int count = _standardDashesGroup.transform.childCount;
@@ -166,6 +171,15 @@ namespace CampusRun.Track
             _fixedDirection = Mathf.Sign(direction);
         }
 
+        /// <summary>
+        /// 연속된 차도(2차선 이상)에서 바로 다음 행(Z+1)도 차도인지 설정합니다.
+        /// true일 때만 현재 차도와 다음 차도 사이의 경계선(localZ = +0.5f)에 일정한 흰색 점선을 표시합니다.
+        /// </summary>
+        public void SetHasNextRoadLane(bool hasNextRoadLane)
+        {
+            _hasNextRoadLane = hasNextRoadLane;
+        }
+
         protected override void OnLaneSpawned()
         {
             base.OnLaneSpawned();
@@ -186,74 +200,44 @@ namespace CampusRun.Track
                 _crosswalkGroup.SetActive(false);
             }
 
-            // 1-2. 통일했던 그 일자 페인트(점선) 패턴들을 도로마다 랜덤하게 출현
-            float invX = 1f / Mathf.Max(0.001f, transform.localScale.x);
-
-            if (_dashPatternGroups != null && _dashPatternGroups.Length > 0)
+            // 1-2. 길건너 친구들 원작 스타일:
+            // 제각각이던 변형 패턴을 모두 끄고, 연속된 차도(2차선 이상) 사이의 경계선(localZ = +0.5f)에만
+            // 일정한 길이(1.6m)와 간격(3.6m)의 단일 흰색 점선(_standardDashesGroup)을 표시합니다.
+            // (1차선 단독 도로나 연속 차도의 마지막 행에는 흰색 선을 표시하지 않습니다.)
+            if (_dashPatternGroups != null)
             {
-                // 모든 패턴 일단 끄기
                 for (int i = 0; i < _dashPatternGroups.Length; i++)
                 {
-                    if (_dashPatternGroups[i] != null) _dashPatternGroups[i].SetActive(false);
-                }
-
-                // 85% 확률로 일자 점선 패턴 중 하나 랜덤 선택 (15%는 페인트 없는 깔끔한 아스팔트 골목길)
-                if (Random.value < 0.85f)
-                {
-                    int chosenIdx = Random.Range(0, _dashPatternGroups.Length);
-                    GameObject chosenPattern = _dashPatternGroups[chosenIdx];
-                    if (chosenPattern != null)
+                    if (_dashPatternGroups[i] != null)
                     {
-                        chosenPattern.SetActive(true);
-                        // 점선 위상도 살짝 시프트하여 매 도로마다 자연스러운 차선 간격 연출
-                        float shiftX = Random.Range(-2.2f, 2.2f);
-                        chosenPattern.transform.localPosition = new Vector3(shiftX * invX, 0f, 0f);
+                        _dashPatternGroups[i].SetActive(false);
                     }
                 }
             }
-            else if (_standardDashesGroup != null)
-            {
-                CacheDashChildren();
 
-                // 85% 확률로 일자 점선 패턴 등장 (15%는 페인트 없는 깨끗한 아스팔트)
-                float roll = Random.value;
-                if (roll < 0.85f)
+            CacheDashChildren();
+
+            if (_standardDashesGroup != null)
+            {
+                if (_hasNextRoadLane)
                 {
                     _standardDashesGroup.SetActive(true);
+                    // X축 랜덤 시프트 없이 정중앙(0f) 고정 정렬, Z축은 현재 차도와 다음 차도 사이 경계(+0.5f)에 배치
+                    _standardDashesGroup.transform.localPosition = new Vector3(0f, 0f, 0.5f);
 
-                    // 점선 X축 위상 랜덤 시프트
-                    float shiftX = Random.Range(-2.2f, 2.2f);
-                    _standardDashesGroup.transform.localPosition = new Vector3(shiftX * invX, 0f, 0f);
-
-                    // 그 일자 페인트를 활용한 3가지 세부 패턴 랜덤 연출:
-                    // 패턴 A (40%): 기본 일정 간격 점선 (모든 대시 표시)
-                    // 패턴 B (35%): 2칸에 1개씩 띄엄띄엄 나타나는 넓은 간격 점선
-                    // 패턴 C (25%): 3칸에 1개씩 시원하게 나타나는 성긴 점선
-                    float subPatternRoll = Random.value;
                     if (_dashChildren != null)
                     {
                         for (int i = 0; i < _dashChildren.Length; i++)
                         {
-                            if (_dashChildren[i] == null) continue;
-
-                            if (subPatternRoll < 0.40f)
+                            if (_dashChildren[i] != null)
                             {
                                 _dashChildren[i].gameObject.SetActive(true);
-                            }
-                            else if (subPatternRoll < 0.75f)
-                            {
-                                _dashChildren[i].gameObject.SetActive(i % 2 == 0);
-                            }
-                            else
-                            {
-                                _dashChildren[i].gameObject.SetActive(i % 3 == 0);
                             }
                         }
                     }
                 }
                 else
                 {
-                    // 15%는 페인트 없는 깔끔한 아스팔트 골목길
                     _standardDashesGroup.SetActive(false);
                 }
             }
@@ -268,7 +252,6 @@ namespace CampusRun.Track
             if (_spawnRoutine != null) StopCoroutine(_spawnRoutine);
             _spawnRoutine = StartCoroutine(VehicleSpawnRoutine());
         }
-
 
         private void SelectLaneVehicle()
         {
@@ -328,6 +311,7 @@ namespace CampusRun.Track
         protected override void OnLaneRecycled()
         {
             base.OnLaneRecycled();
+            _hasNextRoadLane = false;
 
             if (_spawnRoutine != null)
             {

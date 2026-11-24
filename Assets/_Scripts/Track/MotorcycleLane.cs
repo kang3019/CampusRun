@@ -44,6 +44,10 @@ namespace CampusRun.Track
         // 런타임 상태
         private float _currentDirection = 1f;
         private Coroutine _cycleRoutine;
+        private bool _hasNextRoadLane = false;
+        private GameObject _roadDividerDashes;
+        private static Material _cachedRoadMarkingMat;
+
         private static IObjectPool<FastMotorcycle> _sharedMotorcyclePool;
         private readonly List<FastMotorcycle> _activeMotorcycles = new List<FastMotorcycle>();
         private static Transform _fastVehicleContainer;
@@ -52,6 +56,7 @@ namespace CampusRun.Track
         private static void ResetStatics()
         {
             ClearSharedPool();
+            _cachedRoadMarkingMat = null;
         }
 
         public static void ClearSharedPool()
@@ -100,6 +105,15 @@ namespace CampusRun.Track
         private void OnDisable()
         {
             CampusRun.Core.GameEvents.OnGameRestarted -= ClearSharedPool;
+        }
+
+        /// <summary>
+        /// 연속된 차도(2차선 이상)에서 바로 다음 행(Z+1)도 차도인지 설정합니다.
+        /// true일 때만 현재 차도와 다음 차도 사이의 경계선(localZ = +0.5f)에 일정한 흰색 점선을 표시합니다.
+        /// </summary>
+        public void SetHasNextRoadLane(bool hasNextRoadLane)
+        {
+            _hasNextRoadLane = hasNextRoadLane;
         }
 
         private void EnsureSharedPool()
@@ -151,6 +165,8 @@ namespace CampusRun.Track
                 _warningIndicator.SetActive(false);
             }
 
+            UpdateRoadDividerDashes();
+
             EnsureSharedPool();
 
             // 돌진 사이클 루틴 시작
@@ -158,9 +174,92 @@ namespace CampusRun.Track
             _cycleRoutine = StartCoroutine(MotorcycleCycleRoutine());
         }
 
+        private void UpdateRoadDividerDashes()
+        {
+            if (_roadDividerDashes == null)
+            {
+                Transform existing = transform.Find("DashPattern_Standard");
+                if (existing != null)
+                {
+                    _roadDividerDashes = existing.gameObject;
+                }
+            }
+
+            if (!_hasNextRoadLane)
+            {
+                if (_roadDividerDashes != null)
+                {
+                    _roadDividerDashes.SetActive(false);
+                }
+                return;
+            }
+
+            if (_roadDividerDashes == null)
+            {
+                EnsureRoadMarkingMaterial();
+                float invX = 1f / Mathf.Max(0.001f, transform.localScale.x);
+                float invY = 1f / Mathf.Max(0.001f, transform.localScale.y);
+
+                _roadDividerDashes = new GameObject("DashPattern_Standard");
+                _roadDividerDashes.transform.SetParent(transform, false);
+
+                float[] standardX = { -25.2f, -21.6f, -18f, -14.4f, -10.8f, -7.2f, -3.6f, 0f, 3.6f, 7.2f, 10.8f, 14.4f, 18f, 21.6f, 25.2f };
+                for (int i = 0; i < standardX.Length; i++)
+                {
+                    float wx = standardX[i];
+                    GameObject dash = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    dash.name = $"Dash_{wx:F1}";
+                    dash.transform.SetParent(_roadDividerDashes.transform, false);
+                    Collider col = dash.GetComponent<Collider>();
+                    if (col != null) Destroy(col);
+
+                    MeshRenderer mr = dash.GetComponent<MeshRenderer>();
+                    if (mr != null)
+                    {
+                        mr.sharedMaterial = _cachedRoadMarkingMat;
+                        mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                    }
+
+                    dash.transform.localPosition = new Vector3(wx * invX, 0.515f, 0f);
+                    dash.transform.localScale = new Vector3(1.6f * invX, 0.03f * invY, 0.15f);
+                }
+            }
+
+            _roadDividerDashes.transform.localPosition = new Vector3(0f, 0f, 0.5f);
+            _roadDividerDashes.SetActive(true);
+        }
+
+        private static void EnsureRoadMarkingMaterial()
+        {
+#if UNITY_EDITOR
+            if (_cachedRoadMarkingMat == null)
+            {
+                _cachedRoadMarkingMat = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>("Assets/_Materials/M_Road_Marking.mat");
+            }
+#endif
+            if (_cachedRoadMarkingMat == null)
+            {
+                Shader litShader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+                if (litShader != null)
+                {
+                    _cachedRoadMarkingMat = new Material(litShader);
+                    Color markColor = new Color(0.92f, 0.92f, 0.90f, 1f);
+                    _cachedRoadMarkingMat.color = markColor;
+                    if (_cachedRoadMarkingMat.HasProperty("_BaseColor")) _cachedRoadMarkingMat.SetColor("_BaseColor", markColor);
+                    if (_cachedRoadMarkingMat.HasProperty("_Smoothness")) _cachedRoadMarkingMat.SetFloat("_Smoothness", 0.25f);
+                }
+            }
+        }
+
         protected override void OnLaneRecycled()
         {
             base.OnLaneRecycled();
+            _hasNextRoadLane = false;
+
+            if (_roadDividerDashes != null)
+            {
+                _roadDividerDashes.SetActive(false);
+            }
 
             if (_cycleRoutine != null)
             {
