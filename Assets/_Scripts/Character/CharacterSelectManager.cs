@@ -491,29 +491,42 @@ namespace CampusRun.Character
 
                     // 2. 캐릭터별 고유 색상(디자인) 복원
                     Color baseColor = Color.white;
-                    if (mat.HasProperty("_Color")) baseColor = mat.GetColor("_Color");
-                    else if (mat.HasProperty("_BaseColor")) baseColor = mat.GetColor("_BaseColor");
+                    float smoothness = 0.10f; // 기본 무광 매트 재질
 
-                    // [펭귄 전용 3색 멀티 머티리얼 복원]
-                    // siyah: 펭귄의 검은 깃털/날개/머리
-                    if (matName.Contains("siyah") || matName.Contains("black"))
+                    // [펭귄 전용 4색 멀티 머티리얼 완벽 복원]
+                    bool isPenguin = target.name.ToLower().Contains("penguin") || matName.Contains("siyah") || matName.Contains("beyaz") || matName.Contains("turuncu");
+                    if (isPenguin)
                     {
-                        baseColor = new Color(0.12f, 0.15f, 0.22f, 1f);
-                    }
-                    // beyaz: 펭귄의 흰 배/눈
-                    else if (matName.Contains("beyaz") || matName.Contains("white"))
-                    {
-                        baseColor = new Color(0.96f, 0.97f, 0.99f, 1f);
-                    }
-                    // turuncu: 펭귄의 주황 부리/발
-                    else if (matName.Contains("turuncu") || matName.Contains("orange"))
-                    {
-                        baseColor = new Color(1.0f, 0.58f, 0.04f, 1f);
+                        // 1. siyah: 펭귄의 검은 깃털/날개/머리 (다크 네이비 블랙)
+                        if (matName.Contains("siyah") || matName.Contains("black") || matName.Contains("body"))
+                        {
+                            baseColor = new Color(0.12f, 0.15f, 0.22f, 1f);
+                            smoothness = 0.10f;
+                        }
+                        // 2. beyaz: 펭귄의 흰 배 (깨끗한 순백색)
+                        else if (matName.Contains("beyaz") || matName.Contains("white") || matName.Contains("belly"))
+                        {
+                            baseColor = new Color(0.96f, 0.97f, 0.99f, 1f);
+                            smoothness = 0.10f;
+                        }
+                        // 3. turuncu: 펭귄의 주황 부리/발 (선명한 당근 오렌지)
+                        else if (matName.Contains("turuncu") || matName.Contains("orange") || matName.Contains("beak"))
+                        {
+                            baseColor = new Color(1.0f, 0.58f, 0.04f, 1f);
+                            smoothness = 0.20f;
+                        }
+                        // 4. göz (터키어로 '눈'): 펭귄의 앙증맞은 까만 눈동자! (초롱초롱한 칠흑색 블랙)
+                        else if (matName.Contains("göz") || matName.Contains("goz") || matName.Contains("eye") || (matName.Contains("g") && matName.Contains("z")) || m == 3)
+                        {
+                            baseColor = new Color(0.04f, 0.04f, 0.05f, 1f);
+                            smoothness = 0.75f; // 반짝반짝 빛나는 생생한 눈망울!
+                        }
                     }
                     // [해골 전용 카툰 뼈 컬러]
                     else if (matName.Contains("skeleton") || target.name.ToLower().Contains("skeleton"))
                     {
                         baseColor = new Color(0.93f, 0.91f, 0.85f, 1f); // 아이보리 뼈 색상
+                        smoothness = 0.10f;
                     }
 
                     // 3. URP Lit 셰이더 적용
@@ -533,7 +546,7 @@ namespace CampusRun.Character
                     }
                     if (mat.HasProperty("_Smoothness"))
                     {
-                        mat.SetFloat("_Smoothness", 0.10f); // 번들거림 없는 깔끔한 무광 카툰 질감
+                        mat.SetFloat("_Smoothness", smoothness);
                     }
 
                     newMats[m] = mat;
