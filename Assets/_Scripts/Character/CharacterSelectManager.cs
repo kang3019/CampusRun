@@ -155,7 +155,7 @@ namespace CampusRun.Character
                     modelPrefab: LoadModel("cat"),
                     previewTexture: catThumb,
                     overrideMaterial: false,
-                    customScale: 0.35f // 일반 캐릭터(0.67m)와 완벽히 유사한 0.71m 크기
+                    customScale: 1.0f // 자동 정규화(Auto-Normalize)로 일반 캐릭터(0.65m)와 1:1 완벽 일치
                 )
             };
         }
@@ -558,27 +558,34 @@ namespace CampusRun.Character
             // 2. 새 캐릭터 모델 인스턴스화
             GameObject newVisual = Instantiate(charInfo.modelPrefab, playerTransform);
             newVisual.name = "VisualModel";
-            
-            // 고양이 모델은 피벗이 중심에 있어 바닥(-0.79m) 밑으로 파묻히는 현상 보정
+            newVisual.transform.localPosition = Vector3.zero;
+            newVisual.transform.localRotation = charInfo.modelPrefab.transform.localRotation;
+
+            // 고양이(Blender FBX) 전용: 회전/크기(2cm 방지)/지면 착지 자동 정규화
             if (charInfo.id == "char_cat")
             {
-                newVisual.transform.localPosition = new Vector3(0f, 0.28f, 0f);
+                NormalizeCatModel(newVisual, playerTransform.position);
             }
-            else
-            {
-                newVisual.transform.localPosition = Vector3.zero;
-            }
-            newVisual.transform.localRotation = Quaternion.identity;
 
             // 디버깅: 모든 자식 렌더러 및 머티리얼 로그 기록
             try
             {
                 var sb = new System.Text.StringBuilder();
                 sb.AppendLine($"[DebugModel] Selected: {charInfo.id}, Prefab: {charInfo.modelPrefab.name}");
+                sb.AppendLine($" VisualModel scale: {newVisual.transform.localScale}, lossyScale: {newVisual.transform.lossyScale}, localPos: {newVisual.transform.localPosition}");
                 Renderer[] allR = newVisual.GetComponentsInChildren<Renderer>(true);
                 foreach (var r in allR)
                 {
-                    sb.AppendLine($" Renderer: '{r.name}' ({r.GetType().Name}), enabled={r.enabled}");
+                    sb.AppendLine($" Renderer: '{r.name}' ({r.GetType().Name}), enabled={r.enabled}, bounds.size={r.bounds.size}, bounds.center={r.bounds.center}");
+                    if (r is MeshRenderer mr)
+                    {
+                        var mf = mr.GetComponent<MeshFilter>();
+                        sb.AppendLine($"   MeshFilter: {(mf != null ? (mf.sharedMesh != null ? $"mesh='{mf.sharedMesh.name}', verts={mf.sharedMesh.vertexCount}, meshBounds={mf.sharedMesh.bounds.size}" : "mesh=NULL") : "NO MF")}");
+                    }
+                    else if (r is SkinnedMeshRenderer smr)
+                    {
+                        sb.AppendLine($"   SkinnedMeshRenderer: {(smr.sharedMesh != null ? $"mesh='{smr.sharedMesh.name}', verts={smr.sharedMesh.vertexCount}, meshBounds={smr.sharedMesh.bounds.size}" : "mesh=NULL")}");
+                    }
                     for (int mi = 0; mi < r.sharedMaterials.Length; mi++)
                     {
                         var m = r.sharedMaterials[mi];
@@ -757,8 +764,8 @@ namespace CampusRun.Character
                         mat.SetFloat("_Smoothness", smoothness);
                     }
 
-                    // 눈동자 머티리얼은 양면 렌더링(Cull Off)으로 어떤 각도나 노멀 방향에서도 100% 렌더링 보장!
-                    if (isEye && mat.HasProperty("_Cull"))
+                    // 눈동자, 고양이, 해골 머티리얼은 양면 렌더링(Cull Off)으로 어떤 노멀 방향이나 각도에서도 100% 가시성 보장!
+                    if ((isEye || isCat || isSkeleton) && mat.HasProperty("_Cull"))
                     {
                         mat.SetFloat("_Cull", 0f); // 0 = Off (양면 렌더링)
                     }
@@ -777,9 +784,53 @@ namespace CampusRun.Character
         }
 
         /// <summary>
+        /// Blender에서 임포트된 고양이 모델의 회전(누워있음 방지), 스케일(2cm 축소 방지), 바닥 착지를 완벽 자동 보정합니다.
+        /// </summary>
+        private void NormalizeCatModel(GameObject catVisual, Vector3 groundWorldPos)
+        {
+            if (catVisual == null) return;
+
+            Renderer[] rends = catVisual.GetComponentsInChildren<Renderer>(true);
+            if (rends == null || rends.Length == 0) return;
+
+            // 1. 현재 바운드 계산
+            Bounds b = rends[0].bounds;
+            for (int i = 1; i < rends.Length; i++) b.Encapsulate(rends[i].bounds);
+
+            // 모델이 앞으로 엎어져 누워있는 경우 (Z 길이가 Y 높이보다 긴 경우) 직립 회전 보정
+            if (b.size.z > b.size.y * 1.15f)
+            {
+                catVisual.transform.localRotation *= Quaternion.Euler(90f, 0f, 0f);
+                b = rends[0].bounds;
+                for (int i = 1; i < rends.Length; i++) b.Encapsulate(rends[i].bounds);
+                if (b.size.z > b.size.y * 1.15f)
+                {
+                    catVisual.transform.localRotation *= Quaternion.Euler(-180f, 0f, 0f);
+                    b = rends[0].bounds;
+                    for (int i = 1; i < rends.Length; i++) b.Encapsulate(rends[i].bounds);
+                }
+            }
+
+            // 2. 목표 높이: Kenney 일반 캐릭터와 동일한 0.65m로 스케일 자동 정규화!
+            float currentHeight = b.size.y;
+            float targetHeight = 0.65f;
+            if (currentHeight > 0.001f)
+            {
+                float multiplier = targetHeight / currentHeight;
+                catVisual.transform.localScale = Vector3.Scale(catVisual.transform.localScale, new Vector3(multiplier, multiplier, multiplier));
+            }
+
+            // 3. 지면(발바닥) 착지 보정: 최하단(min.y)이 지면(0)에 딱 맞닿도록 Y 오프셋 이동
+            b = rends[0].bounds;
+            for (int i = 1; i < rends.Length; i++) b.Encapsulate(rends[i].bounds);
+            float groundOffset = groundWorldPos.y - b.min.y;
+            catVisual.transform.position += Vector3.up * groundOffset;
+        }
+
+        /// <summary>
         /// 텍스처가 누락된 카툰 해골 모델의 얼굴에 인게임 쿼터뷰 카메라에서도 100% 뚜렷하게 보이는
         /// 강렬한 카툰 눈(Stylized Skull Eyes & Glowing Pupil)을 3D로 장착합니다.
-        /// 본 회전 왜곡 방지를 위해 skeletonVisual 직속 자식 및 로컬 좌표계로 완벽 정렬합니다.
+        /// 두개골 뼈 표면 안쪽 안와에 쏙 들어가도록 깊이를 정밀하게 맞춰 돌출을 방지합니다.
         /// </summary>
         private void AttachSkeletonEyes(GameObject skeletonVisual)
         {
@@ -798,7 +849,7 @@ namespace CampusRun.Character
             if (head != null)
             {
                 Vector3 headLocalPos = skeletonVisual.transform.InverseTransformPoint(head.position);
-                headCenterY = headLocalPos.y + 0.32f; // 목(Head) 위쪽 두개골 중심
+                headCenterY = headLocalPos.y + 0.30f; // 목(Head) 위쪽 두개골 중심
             }
 
             Shader urpLit = Shader.Find("Universal Render Pipeline/Lit");
@@ -825,36 +876,30 @@ namespace CampusRun.Character
             }
             if (pupilMat.HasProperty("_Cull")) pupilMat.SetFloat("_Cull", 0f);
 
-            // 두개골 표면(Z=0.52m) 바깥으로 확실하게 돌출된 큼직한 카툰 눈 배치
-            float eyeSpacing = 0.22f; // 좌우 간격
-            float eyeForward = 0.52f; // 전면 돌출 (두개골 앞 표면 위)
-            float eyeY = headCenterY + 0.02f;
+            // 두개골 앞면 안와 속에 쏙 들어간 자연스러운 카툰 눈 배치 (돌출 방지: 0.28m)
+            float eyeSpacing = 0.18f; // 좌우 간격
+            float eyeForward = 0.28f; // 두개골 뼈 표면에 쏙 박히는 최적 깊이
+            float eyeY = headCenterY;
 
-            Vector3 socketScale = new Vector3(0.26f, 0.32f, 0.22f); // 큼직한 타원형 검은 안와
-            Vector3 pupilScale = new Vector3(0.14f, 0.16f, 0.14f);  // 선명한 붉은 안광
+            Vector3 socketScale = new Vector3(0.20f, 0.24f, 0.04f); // 얇고 평평한 검은 안와
+            Vector3 pupilScale = new Vector3(0.10f, 0.12f, 0.04f);  // 안와 속에 쏙 박힌 붉은 안광
 
             // 좌측 눈 (안와 + 붉은 안광)
             Vector3 leftSocket = new Vector3(-eyeSpacing, eyeY, eyeForward);
-            Vector3 leftPupil = new Vector3(-eyeSpacing, eyeY, eyeForward + 0.04f);
+            Vector3 leftPupil = new Vector3(-eyeSpacing, eyeY, eyeForward + 0.01f);
             CreateLocalPart(eyesRoot.transform, leftSocket, socketScale, socketMat, "Socket_Left");
             CreateLocalPart(eyesRoot.transform, leftPupil, pupilScale, pupilMat, "Pupil_Left");
 
             // 우측 눈 (안와 + 붉은 안광)
             Vector3 rightSocket = new Vector3(eyeSpacing, eyeY, eyeForward);
-            Vector3 rightPupil = new Vector3(eyeSpacing, eyeY, eyeForward + 0.04f);
+            Vector3 rightPupil = new Vector3(eyeSpacing, eyeY, eyeForward + 0.01f);
             CreateLocalPart(eyesRoot.transform, rightSocket, socketScale, socketMat, "Socket_Right");
             CreateLocalPart(eyesRoot.transform, rightPupil, pupilScale, pupilMat, "Pupil_Right");
-
-            // 3. 대각선 45도 쿼터뷰(후방 카메라) 시야에서도 붉은 안광이 반짝이도록 양측면 실루엣 포인트 배치
-            Vector3 sideScale = new Vector3(0.11f, 0.11f, 0.11f);
-            Vector3 leftSide = new Vector3(-eyeSpacing * 1.85f, eyeY, eyeForward * 0.55f);
-            Vector3 rightSide = new Vector3(eyeSpacing * 1.85f, eyeY, eyeForward * 0.55f);
-            CreateLocalPart(eyesRoot.transform, leftSide, sideScale, pupilMat, "Pupil_Side_Left");
-            CreateLocalPart(eyesRoot.transform, rightSide, sideScale, pupilMat, "Pupil_Side_Right");
         }
 
         /// <summary>
         /// 고양이 모델에 인게임 쿼터뷰에서 앙증맞고 사랑스러운 고양이 카툰 얼굴(큰 눈망울, 하이라이트, 분홍 코)을 3D로 장착합니다.
+        /// 고양이 모델의 실제 바운드를 기준으로 앞면 표면에 정밀 밀착 배치합니다.
         /// </summary>
         private void AttachCatFace(GameObject catVisual)
         {
@@ -863,8 +908,13 @@ namespace CampusRun.Character
             Transform oldFace = catVisual.transform.Find("Cat_Face_Root");
             if (oldFace != null) Destroy(oldFace.gameObject);
 
+            Renderer[] rends = catVisual.GetComponentsInChildren<Renderer>(true);
+            if (rends == null || rends.Length == 0) return;
+            Bounds b = rends[0].bounds;
+            for (int i = 1; i < rends.Length; i++) b.Encapsulate(rends[i].bounds);
+
             GameObject faceRoot = new GameObject("Cat_Face_Root");
-            faceRoot.transform.SetParent(catVisual.transform, false);
+            faceRoot.transform.SetParent(catVisual.transform, true);
 
             Shader urpLit = Shader.Find("Universal Render Pipeline/Lit");
             if (urpLit == null) urpLit = Shader.Find("Universal Render Pipeline/Simple Lit");
@@ -874,7 +924,7 @@ namespace CampusRun.Character
             Color eyeColor = new Color(0.05f, 0.05f, 0.06f, 1f);
             eyeMat.color = eyeColor;
             if (eyeMat.HasProperty("_BaseColor")) eyeMat.SetColor("_BaseColor", eyeColor);
-            if (eyeMat.HasProperty("_Smoothness")) eyeMat.SetFloat("_Smoothness", 0.92f);
+            if (eyeMat.HasProperty("_Smoothness")) eyeMat.SetFloat("_Smoothness", 0.95f);
             if (eyeMat.HasProperty("_Cull")) eyeMat.SetFloat("_Cull", 0f);
 
             // 2. 반짝이는 눈망울 흰색 하이라이트 머티리얼
@@ -898,32 +948,54 @@ namespace CampusRun.Character
             whiskerMat.color = whiskerColor;
             if (whiskerMat.HasProperty("_BaseColor")) whiskerMat.SetColor("_BaseColor", whiskerColor);
 
-            // 고양이 얼굴 앞면 좌표 (Z=1.20m 부근, Y=0.35m 부근)
-            float eyeSpacing = 0.24f;
-            float eyeY = 0.38f;
-            float faceZ = 1.20f;
+            // 고양이 바운드 중심 및 정면 표면 기준 계산
+            Vector3 center = b.center;
+            float eyeSpacing = b.size.x * 0.18f;
+            float eyeY = center.y + b.size.y * 0.08f;
+            float faceZ = b.max.z - 0.005f;
 
-            Vector3 eyeScale = new Vector3(0.13f, 0.15f, 0.10f);
-            Vector3 lightScale = new Vector3(0.045f, 0.045f, 0.045f);
+            float eyeRadius = b.size.y * 0.08f;
+            Vector3 eyeScale = new Vector3(eyeRadius, eyeRadius * 1.15f, eyeRadius * 0.6f);
+            Vector3 lightScale = eyeScale * 0.35f;
 
             // 좌측 눈 & 하이라이트
-            CreateLocalPart(faceRoot.transform, new Vector3(-eyeSpacing, eyeY, faceZ), eyeScale, eyeMat, "Eye_Left");
-            CreateLocalPart(faceRoot.transform, new Vector3(-eyeSpacing + 0.02f, eyeY + 0.035f, faceZ + 0.045f), lightScale, highlightMat, "Light_Left");
+            CreateWorldPart(faceRoot.transform, new Vector3(center.x - eyeSpacing, eyeY, faceZ), eyeScale, eyeMat, "Eye_Left");
+            CreateWorldPart(faceRoot.transform, new Vector3(center.x - eyeSpacing + eyeRadius * 0.2f, eyeY + eyeRadius * 0.25f, faceZ + 0.015f), lightScale, highlightMat, "Light_Left");
 
             // 우측 눈 & 하이라이트
-            CreateLocalPart(faceRoot.transform, new Vector3(eyeSpacing, eyeY, faceZ), eyeScale, eyeMat, "Eye_Right");
-            CreateLocalPart(faceRoot.transform, new Vector3(eyeSpacing - 0.02f, eyeY + 0.035f, faceZ + 0.045f), lightScale, highlightMat, "Light_Right");
+            CreateWorldPart(faceRoot.transform, new Vector3(center.x + eyeSpacing, eyeY, faceZ), eyeScale, eyeMat, "Eye_Right");
+            CreateWorldPart(faceRoot.transform, new Vector3(center.x + eyeSpacing - eyeRadius * 0.2f, eyeY + eyeRadius * 0.25f, faceZ + 0.015f), lightScale, highlightMat, "Light_Right");
 
             // 앙증맞은 분홍 코
-            Vector3 noseScale = new Vector3(0.10f, 0.07f, 0.08f);
-            CreateLocalPart(faceRoot.transform, new Vector3(0f, 0.25f, faceZ + 0.08f), noseScale, noseMat, "Nose_Pink");
+            Vector3 noseScale = new Vector3(eyeRadius * 0.8f, eyeRadius * 0.6f, eyeRadius * 0.5f);
+            float noseY = eyeY - eyeRadius * 0.9f;
+            CreateWorldPart(faceRoot.transform, new Vector3(center.x, noseY, faceZ + 0.02f), noseScale, noseMat, "Nose_Pink");
 
-            // 귀여운 양쪽 수염 (좌/우 2줄씩)
-            Vector3 whiskerScale = new Vector3(0.20f, 0.015f, 0.015f);
-            CreateLocalPart(faceRoot.transform, new Vector3(-eyeSpacing - 0.14f, 0.26f, faceZ + 0.02f), whiskerScale, whiskerMat, "Whisker_L1");
-            CreateLocalPart(faceRoot.transform, new Vector3(-eyeSpacing - 0.13f, 0.21f, faceZ + 0.02f), whiskerScale, whiskerMat, "Whisker_L2");
-            CreateLocalPart(faceRoot.transform, new Vector3(eyeSpacing + 0.14f, 0.26f, faceZ + 0.02f), whiskerScale, whiskerMat, "Whisker_R1");
-            CreateLocalPart(faceRoot.transform, new Vector3(eyeSpacing + 0.13f, 0.21f, faceZ + 0.02f), whiskerScale, whiskerMat, "Whisker_R2");
+            // 수염 4줄
+            Vector3 whiskerScale = new Vector3(eyeSpacing * 1.1f, 0.012f, 0.012f);
+            CreateWorldPart(faceRoot.transform, new Vector3(center.x - eyeSpacing * 1.5f, noseY + 0.015f, faceZ - 0.01f), whiskerScale, whiskerMat, "Whisker_L1");
+            CreateWorldPart(faceRoot.transform, new Vector3(center.x - eyeSpacing * 1.45f, noseY - 0.025f, faceZ - 0.01f), whiskerScale, whiskerMat, "Whisker_L2");
+            CreateWorldPart(faceRoot.transform, new Vector3(center.x + eyeSpacing * 1.5f, noseY + 0.015f, faceZ - 0.01f), whiskerScale, whiskerMat, "Whisker_R1");
+            CreateWorldPart(faceRoot.transform, new Vector3(center.x + eyeSpacing * 1.45f, noseY - 0.025f, faceZ - 0.01f), whiskerScale, whiskerMat, "Whisker_R2");
+        }
+
+        private void CreateWorldPart(Transform parent, Vector3 worldPos, Vector3 scale, Material mat, string name)
+        {
+            GameObject part = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            part.name = name;
+            part.transform.position = worldPos;
+            part.transform.localScale = scale;
+            part.transform.SetParent(parent, true); // 월드 위치 보존하며 parent 바인딩
+
+            Collider col = part.GetComponent<Collider>();
+            if (col != null) Destroy(col);
+
+            Renderer rend = part.GetComponent<Renderer>();
+            if (rend != null)
+            {
+                rend.sharedMaterial = mat;
+                rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            }
         }
 
         private void CreateLocalPart(Transform parent, Vector3 localPos, Vector3 localScale, Material mat, string name)
