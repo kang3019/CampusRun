@@ -453,6 +453,12 @@ namespace CampusRun.Character
                 EnsureURPMaterials(newVisual, charInfo);
             }
 
+            // 스켈레톤의 경우 전용 3D 카툰 눈구멍 및 안광 장착
+            if (charInfo.id == "char_skeleton")
+            {
+                AttachSkeletonEyes(newVisual);
+            }
+
             // 4. 애니메이터 비활성화 (Crossy Road 물리 바운스/스쿼시 보존)
             Animator anim = newVisual.GetComponentInChildren<Animator>();
             if (anim != null)
@@ -595,6 +601,110 @@ namespace CampusRun.Character
         {
             if (_characters == null || index < 0 || index >= _characters.Length) return null;
             return _characters[index];
+        }
+
+        /// <summary>
+        /// 텍스처가 누락된 카툰 해골 모델의 얼굴 정면에 앙증맞고 또렷한 카툰 눈(Stylized Skull Eyes)을 3D로 장착합니다.
+        /// </summary>
+        private void AttachSkeletonEyes(GameObject skeletonVisual)
+        {
+            if (skeletonVisual == null) return;
+
+            Transform head = FindChildRecursively(skeletonVisual.transform, "Joint_Head");
+            if (head == null) head = FindChildRecursively(skeletonVisual.transform, "Head");
+            if (head == null) return;
+
+            // 기존 눈이 있다면 제거
+            Transform oldEyes = skeletonVisual.transform.Find("Skeleton_Eyes_Root");
+            if (oldEyes != null) Destroy(oldEyes.gameObject);
+
+            GameObject eyesRoot = new GameObject("Skeleton_Eyes_Root");
+            eyesRoot.transform.SetParent(head, false);
+
+            // 머리 크기(높이) 계산
+            Transform headEnd = FindChildRecursively(skeletonVisual.transform, "Joint_HeadEnd");
+            float headHeight = 0.28f;
+            if (headEnd != null)
+            {
+                headHeight = Vector3.Distance(head.position, headEnd.position);
+                if (headHeight < 0.12f || headHeight > 0.8f) headHeight = 0.28f;
+            }
+
+            // 1. 눈구멍(검은 안와) 머티리얼 - 칠흑색 블랙
+            Shader urpLit = Shader.Find("Universal Render Pipeline/Lit");
+            if (urpLit == null) urpLit = Shader.Find("Universal Render Pipeline/Simple Lit");
+            Material socketMat = new Material(urpLit != null ? urpLit : Shader.Find("Diffuse"));
+            socketMat.color = new Color(0.02f, 0.02f, 0.03f, 1f);
+            if (socketMat.HasProperty("_BaseColor")) socketMat.SetColor("_BaseColor", new Color(0.02f, 0.02f, 0.03f, 1f));
+            if (socketMat.HasProperty("_Smoothness")) socketMat.SetFloat("_Smoothness", 0.1f);
+            if (socketMat.HasProperty("_Cull")) socketMat.SetFloat("_Cull", 0f);
+
+            // 2. 눈 중심 붉은 안광 머티리얼 (UI 썸네일과 일치하는 카툰 포인트)
+            Material pupilMat = new Material(urpLit != null ? urpLit : Shader.Find("Diffuse"));
+            Color pupilColor = new Color(0.98f, 0.22f, 0.22f, 1f); // 선명한 카툰 레드
+            pupilMat.color = pupilColor;
+            if (pupilMat.HasProperty("_BaseColor")) pupilMat.SetColor("_BaseColor", pupilColor);
+            if (pupilMat.HasProperty("_EmissionColor"))
+            {
+                pupilMat.EnableKeyword("_EMISSION");
+                pupilMat.SetColor("_EmissionColor", pupilColor * 1.5f);
+            }
+
+            // 플레이어 정면, 위, 우측 벡터 (월드 좌표 기준 계산으로 본 회전축 왜곡 방지)
+            Vector3 forward = skeletonVisual.transform.forward;
+            Vector3 up = skeletonVisual.transform.up;
+            Vector3 right = skeletonVisual.transform.right;
+
+            Vector3 headCenter = head.position + up * (headHeight * 0.40f);
+            float eyeSpacing = headHeight * 0.22f; // 좌우 간격
+            float eyeForwardDist = headHeight * 0.33f; // 얼굴 전면 돌출
+
+            Vector3 leftPos = headCenter - right * eyeSpacing + forward * eyeForwardDist;
+            Vector3 rightPos = headCenter + right * eyeSpacing + forward * eyeForwardDist;
+
+            Vector3 socketScale = new Vector3(headHeight * 0.22f, headHeight * 0.26f, headHeight * 0.16f);
+            Vector3 pupilScale = socketScale * 0.45f;
+
+            // 좌측 눈 (안와 + 안광)
+            CreateEyePart(eyesRoot.transform, leftPos, socketScale, socketMat, "Socket_Left");
+            CreateEyePart(eyesRoot.transform, leftPos + forward * (headHeight * 0.04f), pupilScale, pupilMat, "Pupil_Left");
+
+            // 우측 눈 (안와 + 안광)
+            CreateEyePart(eyesRoot.transform, rightPos, socketScale, socketMat, "Socket_Right");
+            CreateEyePart(eyesRoot.transform, rightPos + forward * (headHeight * 0.04f), pupilScale, pupilMat, "Pupil_Right");
+        }
+
+        private void CreateEyePart(Transform parent, Vector3 worldPos, Vector3 scale, Material mat, string name)
+        {
+            GameObject part = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            part.name = name;
+            part.transform.position = worldPos;
+            part.transform.localScale = scale;
+            part.transform.SetParent(parent, true); // 월드 위치 보존하며 parent에 바인딩
+
+            Collider col = part.GetComponent<Collider>();
+            if (col != null) Destroy(col);
+
+            Renderer rend = part.GetComponent<Renderer>();
+            if (rend != null)
+            {
+                rend.sharedMaterial = mat;
+                rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            }
+        }
+
+        private static Transform FindChildRecursively(Transform parent, string childName)
+        {
+            if (parent == null) return null;
+            if (parent.name.Equals(childName, StringComparison.OrdinalIgnoreCase))
+                return parent;
+
+            for (int i = 0; i < parent.childCount; i++)
+            {
+                Transform found = FindChildRecursively(parent.GetChild(i), childName);
+                if (found != null) return found;
+            }
+            return null;
         }
     }
 }
