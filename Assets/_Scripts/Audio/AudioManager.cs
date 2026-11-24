@@ -126,6 +126,7 @@ namespace CampusRun.Audio
         private AudioClip _proceduralHitClip;
         private AudioClip _proceduralSplashClip;
         private AudioClip _proceduralWarningClip;
+        private AudioClip _proceduralAchievementClearClip;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetAudioManagerStaticState()
@@ -338,6 +339,9 @@ namespace CampusRun.Audio
 
             // 5. 지각 경고 비프음(Warning Chime)
             _proceduralWarningClip = CreateWarningBeepClip("Procedural_Warning", 0.12f);
+
+            // 6. 업적/미션 클리어 축하 차임벨(Achievement Clear Fanfare)
+            _proceduralAchievementClearClip = CreateAchievementClearClip("Procedural_AchievementClear", 0.42f);
         }
 
         #endregion
@@ -398,6 +402,21 @@ namespace CampusRun.Audio
         public void PlayLogSplashSound()
         {
             PlayWoodPlankSound();
+        }
+
+        /// <summary>
+        /// 업적/미션 클리어 시 경쾌한 레트로 팡파레 차임벨 사운드를 재생합니다.
+        /// </summary>
+        public void PlayAchievementClearSound()
+        {
+            if (_proceduralAchievementClearClip == null)
+            {
+                _proceduralAchievementClearClip = CreateAchievementClearClip("Procedural_AchievementClear", 0.42f);
+            }
+            if (_proceduralAchievementClearClip != null)
+            {
+                PlaySFX(_proceduralAchievementClearClip, 0.95f, 1.0f);
+            }
         }
 
         private float _lastVehicleSoundTime = -10f;
@@ -754,6 +773,41 @@ namespace CampusRun.Audio
                 float envelope = Mathf.Sin(t * Mathf.PI);
 
                 samples[i] = square * envelope;
+            }
+
+            AudioClip clip = AudioClip.Create(clipName, sampleCount, 1, sampleRate, false);
+            clip.SetData(samples, 0);
+            return clip;
+        }
+
+        /// <summary>
+        /// 업적/미션 클리어 시 경쾌한 3단 상승 아르페지오 차임벨(C5 -> E5 -> G5 -> C6) 사운드 합성
+        /// </summary>
+        private AudioClip CreateAchievementClearClip(string clipName, float duration)
+        {
+            int sampleRate = 44100;
+            int sampleCount = Mathf.CeilToInt(sampleRate * duration);
+            float[] samples = new float[sampleCount];
+
+            float[] notes = new float[] { 523.25f, 659.25f, 783.99f, 1046.50f }; // C5, E5, G5, C6
+            float phase = 0f;
+            float phaseHarmonic = 0f;
+
+            for (int i = 0; i < sampleCount; i++)
+            {
+                float t = (float)i / sampleCount;
+                int noteIdx = Mathf.Min(notes.Length - 1, Mathf.FloorToInt(t * notes.Length));
+                float localT = (t * notes.Length) - noteIdx;
+
+                float freq = notes[noteIdx];
+                phase += 2.0f * Mathf.PI * freq / sampleRate;
+                phaseHarmonic += 2.0f * Mathf.PI * (freq * 2.0f) / sampleRate;
+
+                float tone = Mathf.Sin(phase) * 0.7f + Mathf.Sin(phaseHarmonic) * 0.25f;
+                float noteEnv = Mathf.Exp(-localT * 4.5f);
+                float globalEnv = (t > 0.85f) ? (1.0f - (t - 0.85f) / 0.15f) : 1.0f;
+
+                samples[i] = tone * noteEnv * globalEnv * 0.65f;
             }
 
             AudioClip clip = AudioClip.Create(clipName, sampleCount, 1, sampleRate, false);

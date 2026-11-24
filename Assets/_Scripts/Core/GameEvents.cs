@@ -28,7 +28,7 @@ namespace CampusRun.Core
 
     /// <summary>
     /// 시스템 간의 직접 참조를 제거하고 느슨한 결합(Loose Coupling)을 제공하는 글로벌 이벤트 허브입니다.
-    /// 플레이어, 레인 스포너, UI HUD, 사운드 매니저가 이 이벤트를 발행(Trigger)하고 구독(Subscribe)합니다.
+    /// 플레이어, 레인 스포너, UI HUD, 사운드 매니저, 업적 시스템이 이 이벤트를 발행(Trigger)하고 구독(Subscribe)합니다.
     /// </summary>
     public static class GameEvents
     {
@@ -60,6 +60,9 @@ namespace CampusRun.Core
         /// <summary> 플레이어의 이산 그리드 좌표가 변경되었을 때 발생합니다. (X, Y, Z) </summary>
         public static event Action<Vector3Int> OnPlayerGridMoved;
 
+        /// <summary> 플레이어가 통나무(부유판) 위에 착지했을 때 발생합니다. </summary>
+        public static event Action OnPlayerSteppedPlank;
+
         /// <summary> 플레이어가 장애물에 충돌하거나 타임아웃으로 사망했을 때 발생합니다. (사망 원인 문자열, 최종 도달 거리) </summary>
         public static event Action<string, int> OnPlayerDied;
 
@@ -75,6 +78,7 @@ namespace CampusRun.Core
         public static void TriggerPlayerHopped(int playerGridZ) => OnPlayerHopped?.Invoke(playerGridZ);
         public static void TriggerPlayerHopStarted(Vector3Int targetGrid) => OnPlayerHopStarted?.Invoke(targetGrid);
         public static void TriggerPlayerGridMoved(Vector3Int newGridPos) => OnPlayerGridMoved?.Invoke(newGridPos);
+        public static void TriggerPlayerSteppedPlank() => OnPlayerSteppedPlank?.Invoke();
         public static void TriggerPlayerDied(string deathReason, int finalDistance) => OnPlayerDied?.Invoke(deathReason, finalDistance);
         public static void TriggerInactivityWarning(bool isWarning) => OnInactivityWarning?.Invoke(isWarning);
         public static void TriggerInactivityTimerUpdated(float remainingSeconds, float progress) => OnInactivityTimerUpdated?.Invoke(remainingSeconds, progress);
@@ -126,9 +130,11 @@ namespace CampusRun.Core
             OnPlayerHopped = null;
             OnPlayerHopStarted = null;
             OnPlayerGridMoved = null;
+            OnPlayerSteppedPlank = null;
             OnPlayerDied = null;
             OnInactivityWarning = null;
             OnInactivityTimerUpdated = null;
+            OnBoundaryWarning = null;
 
             OnScoreChanged = null;
             OnCoinCollected = null;
