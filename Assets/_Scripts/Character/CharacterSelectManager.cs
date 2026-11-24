@@ -419,6 +419,25 @@ namespace CampusRun.Character
             newVisual.transform.localPosition = Vector3.zero;
             newVisual.transform.localRotation = Quaternion.identity;
 
+            // 디버깅: 모든 자식 렌더러 및 머티리얼 로그 기록
+            try
+            {
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine($"[DebugModel] Selected: {charInfo.id}, Prefab: {charInfo.modelPrefab.name}");
+                Renderer[] allR = newVisual.GetComponentsInChildren<Renderer>(true);
+                foreach (var r in allR)
+                {
+                    sb.AppendLine($" Renderer: '{r.name}' ({r.GetType().Name}), enabled={r.enabled}");
+                    for (int mi = 0; mi < r.sharedMaterials.Length; mi++)
+                    {
+                        var m = r.sharedMaterials[mi];
+                        sb.AppendLine($"   Mat[{mi}]: '{(m != null ? m.name : "NULL")}', shader='{(m != null ? m.shader.name : "NULL")}'");
+                    }
+                }
+                System.IO.File.WriteAllText("Temp/penguin_debug.txt", sb.ToString());
+            }
+            catch { }
+
             // 3. 머티리얼 적용
             if (charInfo.overrideMaterial && _characterMaterial != null)
             {
@@ -431,7 +450,7 @@ namespace CampusRun.Character
             else
             {
                 // 펭귄 등 자체 모델 머티리얼: URP 셰이더 호환성 보장
-                EnsureURPMaterials(newVisual);
+                EnsureURPMaterials(newVisual, charInfo);
             }
 
             // 4. 애니메이터 비활성화 (Crossy Road 물리 바운스/스쿼시 보존)
@@ -445,11 +464,14 @@ namespace CampusRun.Character
             player.SetVisualModel(newVisual.transform, playPopEffect, charInfo.customScale);
         }
 
-        private void EnsureURPMaterials(GameObject target)
+        private void EnsureURPMaterials(GameObject target, CharacterInfo charInfo)
         {
             Renderer[] renderers = target.GetComponentsInChildren<Renderer>(true);
             Shader urpLit = Shader.Find("Universal Render Pipeline/Lit");
             if (urpLit == null) urpLit = Shader.Find("Universal Render Pipeline/Simple Lit");
+
+            bool isPenguin = (charInfo != null && charInfo.id == "char_penguin") || target.name.ToLower().Contains("penguin");
+            bool isSkeleton = (charInfo != null && charInfo.id == "char_skeleton") || target.name.ToLower().Contains("skeleton");
 
             for (int i = 0; i < renderers.Length; i++)
             {
@@ -477,24 +499,11 @@ namespace CampusRun.Character
                     if (mainTex == null && mat.HasProperty("_MainTex")) mainTex = mat.GetTexture("_MainTex");
                     if (mainTex == null && mat.HasProperty("_BaseMap")) mainTex = mat.GetTexture("_BaseMap");
 
-                    // 스켈레톤의 경우 Texture_BaseColor_v02.png 검색 및 연결
-                    if (mainTex == null && (matName.Contains("skeleton") || target.name.ToLower().Contains("skeleton")))
-                    {
-                        mainTex = Resources.Load<Texture2D>("Characters/Texture_BaseColor_v02");
-#if UNITY_EDITOR
-                        if (mainTex == null)
-                        {
-                            mainTex = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Characters/Texture_BaseColor_v02.png");
-                        }
-#endif
-                    }
-
-                    // 2. 캐릭터별 고유 색상(디자인) 복원
                     Color baseColor = Color.white;
                     float smoothness = 0.10f; // 기본 무광 매트 재질
+                    bool isEye = false;
 
                     // [펭귄 전용 4색 멀티 머티리얼 완벽 복원]
-                    bool isPenguin = target.name.ToLower().Contains("penguin") || matName.Contains("siyah") || matName.Contains("beyaz") || matName.Contains("turuncu");
                     if (isPenguin)
                     {
                         // 1. siyah: 펭귄의 검은 깃털/날개/머리 (다크 네이비 블랙)
@@ -515,16 +524,36 @@ namespace CampusRun.Character
                             baseColor = new Color(1.0f, 0.58f, 0.04f, 1f);
                             smoothness = 0.20f;
                         }
-                        // 4. göz (터키어로 '눈'): 펭귄의 앙증맞은 까만 눈동자! (초롱초롱한 칠흑색 블랙)
-                        else if (matName.Contains("göz") || matName.Contains("goz") || matName.Contains("eye") || (matName.Contains("g") && matName.Contains("z")) || m == 3)
+                        // 4. göz (터키어로 '눈', Eye): 펭귄의 까만 눈동자! (초롱초롱한 칠흑색 블랙)
+                        //    - FBX 머티리얼 이름: "göz"
+                        //    - UTF-8 바이트 깨짐 대응: göz, goz, eye, g..z, 또는 4번째 머티리얼(인덱스 3)
+                        else if (matName.Contains("göz") || matName.Contains("goz") || matName.Contains("eye") || (matName.StartsWith("g") && matName.EndsWith("z")) || m == 3 || origMats.Length == 4)
                         {
-                            baseColor = new Color(0.04f, 0.04f, 0.05f, 1f);
-                            smoothness = 0.75f; // 반짝반짝 빛나는 생생한 눈망울!
+                            baseColor = new Color(0.015f, 0.015f, 0.02f, 1f); // 선명한 칠흑색 눈동자!
+                            smoothness = 0.85f; // 반짝이는 유리구슬 같은 눈동자 하이라이트!
+                            isEye = true;
+                        }
+                        else
+                        {
+                            // 알 수 없는 머티리얼이더라도 펭귄에서 몸체/배/부리가 아니면 눈동자일 확률 100%
+                            baseColor = new Color(0.015f, 0.015f, 0.02f, 1f);
+                            smoothness = 0.85f;
+                            isEye = true;
                         }
                     }
                     // [해골 전용 카툰 뼈 컬러]
-                    else if (matName.Contains("skeleton") || target.name.ToLower().Contains("skeleton"))
+                    else if (isSkeleton)
                     {
+                        if (mainTex == null)
+                        {
+                            mainTex = Resources.Load<Texture2D>("Characters/Texture_BaseColor_v02");
+#if UNITY_EDITOR
+                            if (mainTex == null)
+                            {
+                                mainTex = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Characters/Texture_BaseColor_v02.png");
+                            }
+#endif
+                        }
                         baseColor = new Color(0.93f, 0.91f, 0.85f, 1f); // 아이보리 뼈 색상
                         smoothness = 0.10f;
                     }
@@ -547,6 +576,12 @@ namespace CampusRun.Character
                     if (mat.HasProperty("_Smoothness"))
                     {
                         mat.SetFloat("_Smoothness", smoothness);
+                    }
+
+                    // 눈동자 머티리얼은 양면 렌더링(Cull Off)으로 어떤 각도나 노멀 방향에서도 100% 렌더링 보장!
+                    if (isEye && mat.HasProperty("_Cull"))
+                    {
+                        mat.SetFloat("_Cull", 0f); // 0 = Off (양면 렌더링)
                     }
 
                     newMats[m] = mat;
