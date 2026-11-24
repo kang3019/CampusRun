@@ -317,7 +317,7 @@ namespace CampusRun.EditorTools
             MeshRenderer mrBraille = brailleLine.GetComponent<MeshRenderer>();
             mrBraille.sharedMaterial = matBraille;
             mrBraille.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            brailleLine.transform.localPosition = new Vector3(0f, 0.515f, 0.25f);
+            brailleLine.transform.localPosition = new Vector3(0f, 0.515f, 0f);
             brailleLine.transform.localScale = new Vector3(centralWalkwayScaleX, 0.06f, 0.25f);
 
             brailleGroup.SetActive(false);

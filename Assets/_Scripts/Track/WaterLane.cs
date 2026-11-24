@@ -25,8 +25,11 @@ namespace CampusRun.Track
         [SerializeField] private float _maxSpeed = 5.0f;
 
         [Tooltip("널판지 스폰 간격(초) 범위")]
-        [SerializeField] private float _minSpawnInterval = 2.2f;
-        [SerializeField] private float _maxSpawnInterval = 4.0f;
+        [SerializeField] private float _minSpawnInterval = 1.5f;
+        [SerializeField] private float _maxSpawnInterval = 2.6f;
+
+        [Tooltip("최대 보장 스폰 주기(초) - 어떤 상황에서도 이 시간 이내에 다음 통나무가 반드시 등장")]
+        [SerializeField] private float _maxGuaranteedInterval = 2.6f;
 
         [Tooltip("스폰 시작 X축 좌표 (하천 폭 60m 기준 ±26.0m)")]
         [SerializeField] private float _spawnBoundaryX = 26.0f;
@@ -97,7 +100,15 @@ namespace CampusRun.Track
 
         private void EnsureSharedPool()
         {
-            if (_plankPrefab == null || _sharedPlankPool != null) return;
+            if (_plankPrefab == null) return;
+
+            // 씬 리로드 등으로 기존 풀 컨테이너가 파괴되었으면 파괴된 참조를 비우고 새 풀 생성
+            if (_sharedPlankPool != null && _plankRootContainer == null)
+            {
+                ClearSharedPool();
+            }
+
+            if (_sharedPlankPool != null) return;
 
             Transform container = GetOrCreateContainer();
             FloatingPlank prefabRef = _plankPrefab;
@@ -120,8 +131,8 @@ namespace CampusRun.Track
                     if (plank != null) Destroy(plank.gameObject);
                 },
                 collectionCheck: false,
-                defaultCapacity: 12,
-                maxSize: 36
+                defaultCapacity: 18,
+                maxSize: 64
             );
         }
 
@@ -159,16 +170,47 @@ namespace CampusRun.Track
             _spawnRoutine = StartCoroutine(PlankSpawnRoutine());
         }
 
+        private float GetEffectiveMaxInterval()
+        {
+            float capped = Mathf.Min(_maxSpawnInterval, _maxGuaranteedInterval);
+            return Mathf.Max(1.6f, capped);
+        }
+
+        private float GetEffectiveMinInterval(float effectiveMax)
+        {
+            // 통나무 길이(2.2m)와 속도 기준 겹치지 않는 안전 최소 간격 보장
+            float noOverlapMin = Mathf.Max(1.25f, 3.2f / Mathf.Max(1f, _currentSpeed));
+            float desiredMin = Mathf.Min(_minSpawnInterval, effectiveMax * 0.65f);
+            return Mathf.Clamp(desiredMin, noOverlapMin, effectiveMax);
+        }
+
         private void PrewarmPlanks()
         {
             if (_sharedPlankPool == null) return;
 
-            // 중앙 부근 및 진입로 주변에 널판지 2개 사전 배치
-            float firstX = (_currentDirection > 0) ? -2f : 2f;
-            float secondX = (_currentDirection > 0) ? 5f : -5f;
+            // 전체 하천 구간(-spawnBoundaryX ~ +spawnBoundaryX)에 정상 스폰 주기에 맞춰 고르게 사전 배치하여
+            // 플레이어가 물 레인 앞에 도착했을 때 긴 공백 없이 즉시 통나무가 이어지도록 보장
+            float effectiveMax = GetEffectiveMaxInterval();
+            float effectiveMin = GetEffectiveMinInterval(effectiveMax);
 
-            SpawnPlankAt(firstX);
-            SpawnPlankAt(secondX);
+            float startEdge = (_currentDirection > 0f) ? -_spawnBoundaryX : _spawnBoundaryX;
+            float endEdge = -startEdge;
+
+            // 첫 통나무는 스폰 경계에서 살짝 안쪽에 배치
+            float cursorX = startEdge + _currentDirection * Random.Range(1.5f, 3.5f);
+
+            int safetyCount = 0;
+            while (safetyCount < 16)
+            {
+                bool inBounds = (_currentDirection > 0f) ? (cursorX <= endEdge - 1.5f) : (cursorX >= endEdge + 1.5f);
+                if (!inBounds) break;
+
+                SpawnPlankAt(cursorX);
+
+                float stepInterval = Random.Range(effectiveMin, effectiveMax);
+                cursorX += _currentDirection * (_currentSpeed * stepInterval);
+                safetyCount++;
+            }
         }
 
         protected override void OnLaneRecycled()
@@ -194,9 +236,12 @@ namespace CampusRun.Track
 
         private IEnumerator PlankSpawnRoutine()
         {
+            float effectiveMax = GetEffectiveMaxInterval();
+            float effectiveMin = GetEffectiveMinInterval(effectiveMax);
+
             while (true)
             {
-                float waitTime = Random.Range(_minSpawnInterval, _maxSpawnInterval);
+                float waitTime = Random.Range(effectiveMin, effectiveMax);
                 yield return new WaitForSeconds(waitTime);
 
                 float startX = (_currentDirection > 0) ? -_spawnBoundaryX : _spawnBoundaryX;
@@ -216,9 +261,18 @@ namespace CampusRun.Track
             }
             catch
             {
-                _sharedPlankPool = null;
+                plank = null;
+            }
+
+            // 씬 리로드 등으로 풀 내부에 파괴된 오브젝트가 남아있었다면 풀을 초기화 후 즉시 재할당
+            if (plank == null)
+            {
+                ClearSharedPool();
                 EnsureSharedPool();
-                if (_sharedPlankPool != null) plank = _sharedPlankPool.Get();
+                if (_sharedPlankPool != null)
+                {
+                    plank = _sharedPlankPool.Get();
+                }
             }
 
             if (plank == null) return;

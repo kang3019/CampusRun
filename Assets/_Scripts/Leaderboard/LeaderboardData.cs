@@ -14,20 +14,22 @@ namespace CampusRun.Leaderboard
         public int score;
         public string grade;
         public string date;
+        public int equippedBorder; // 0: 없음, 1: 금, 2: 은, 3: 동
 
         public LeaderboardEntry() { }
 
-        public LeaderboardEntry(string name, int score, string grade, string date = null)
+        public LeaderboardEntry(string name, int score, string grade, string date = null, int equippedBorder = 0)
         {
             this.playerName = string.IsNullOrEmpty(name) ? "익명의 러너" : name;
             this.score = score;
             this.grade = string.IsNullOrEmpty(grade) ? "F" : grade;
             this.date = string.IsNullOrEmpty(date) ? DateTime.Now.ToString("MM/dd HH:mm") : date;
+            this.equippedBorder = equippedBorder;
         }
     }
 
     /// <summary>
-    /// TOP 5 랭킹 목록 전체를 직렬화하기 위한 래퍼 클래스입니다.
+    /// 전체 유저 랭킹 목록을 직렬화하기 위한 래퍼 클래스입니다.
     /// </summary>
     [Serializable]
     public class LeaderboardData

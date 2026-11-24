@@ -184,10 +184,11 @@ namespace CampusRun.Track
 
         private void SpawnInitialLanes()
         {
-            // Z = -3 부터 시작하여 초기 안전 구간 생성
+            // Z = -3 부터 시작하여 초기 안전 구간 생성 (초기 광장 묶음 중 전방 중앙 줄에만 점자블록 1개 표시)
+            int centerStartZ = Mathf.Max(1, _initialSafeLaneCount / 2);
             for (int z = -3; z <= _initialSafeLaneCount; z++)
             {
-                SpawnSafeLane(z);
+                SpawnSafeLane(z, z == centerStartZ);
             }
             _currentMaxSpawnedZ = _initialSafeLaneCount;
 
@@ -218,6 +219,7 @@ namespace CampusRun.Track
         private int _currentRoadGroupLeft = 1;    // 첫 도로는 무조건 1칸 단독 도로
         private int _currentWaterGroupLeft = 0;   // 남은 물웅덩이 수
         private int _currentSafeGroupLeft = 0;    // 남은 쉼터 수
+        private int _currentSafeGroupTotal = 0;   // 현재 인도 묶음(한 뭉탱이)의 전체 줄 수
         private float _lastRoadDirection = 1f;    // 직전 도로 방향 (+1: 오른쪽, -1: 왼쪽)
         private float _lastWaterDirection = 1f;   // 직전 물웅덩이 표류 방향 (+1: 오른쪽, -1: 왼쪽)
 
@@ -226,7 +228,12 @@ namespace CampusRun.Track
             // 1. 안전 쉼터 구간이어야 할 때
             if (_currentSafeGroupLeft > 0)
             {
-                SpawnSafeLane(zIndex);
+                // 인도 여러 줄이 한 뭉탱이일 때 그 묶음의 중앙 줄에만 점자블록 1개가 나오도록 계산
+                int rowIndexInGroup = _currentSafeGroupTotal - _currentSafeGroupLeft;
+                int centerRowIndex = _currentSafeGroupTotal / 2;
+                bool showBraille = (rowIndexInGroup == centerRowIndex);
+
+                SpawnSafeLane(zIndex, showBraille);
                 _currentSafeGroupLeft--;
 
                 // 쉼터 구간이 끝나면 진행도(zIndex)에 맞춰 다음 위험 구간(도로 or 거대 물웅덩이) 준비
@@ -274,7 +281,8 @@ namespace CampusRun.Track
                 // 물웅덩이 묶음이 끝나면 다음 안전 쉼터 보장
                 if (_currentWaterGroupLeft <= 0)
                 {
-                    _currentSafeGroupLeft = Random.Range(1, 3);
+                    _currentSafeGroupTotal = Random.Range(1, 3);
+                    _currentSafeGroupLeft = _currentSafeGroupTotal;
                 }
                 return;
             }
@@ -292,20 +300,22 @@ namespace CampusRun.Track
                 if (_currentRoadGroupLeft <= 0)
                 {
                     // 초반(Z < 30)에는 안전 쉼터를 2~3칸 보장하여 여유롭게 호흡 조절
-                    _currentSafeGroupLeft = (zIndex < 30) ? Random.Range(2, 4) : Random.Range(1, 3);
+                    _currentSafeGroupTotal = (zIndex < 30) ? Random.Range(2, 4) : Random.Range(1, 3);
+                    _currentSafeGroupLeft = _currentSafeGroupTotal;
                 }
                 return;
             }
 
             // 기본 안전 처리
-            SpawnSafeLane(zIndex);
+            SpawnSafeLane(zIndex, true);
         }
 
-        private void SpawnSafeLane(int zIndex)
+        private void SpawnSafeLane(int zIndex, bool showBraille = false)
         {
             if (_safeLanePool == null) return;
 
             SafeLane lane = _safeLanePool.Get();
+            lane.SetShowBrailleBlock(showBraille);
             lane.Initialize(zIndex);
             _activeLanes.Add(lane);
         }
@@ -413,6 +423,7 @@ namespace CampusRun.Track
             _currentRoadGroupLeft = 1;
             _currentWaterGroupLeft = 0;
             _currentSafeGroupLeft = 0;
+            _currentSafeGroupTotal = 0;
             _lastRoadDirection = 1f;
             _lastWaterDirection = 1f;
 

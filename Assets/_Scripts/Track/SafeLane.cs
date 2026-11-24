@@ -22,7 +22,7 @@ namespace CampusRun.Track
         [Tooltip("노란색 점자블록 그룹")]
         [SerializeField] private GameObject _brailleBlockGroup;
 
-        [Tooltip("점자블록이 등장할 확률 (기본 0.45 = 약 2~3레인마다 1개 꼴로 자연스럽게 출현)")]
+        [Tooltip("점자블록이 등장할 확률 (하위 호환용, 기본은 인도 묶음의 중앙 줄에만 1개 표시)")]
         [Range(0f, 1f)]
         [SerializeField] private float _brailleBlockChance = 0.45f;
 
@@ -68,6 +68,9 @@ namespace CampusRun.Track
         // 런타임 캐싱
         private MeshRenderer _meshRenderer;
         private StationaryObstacle _cachedSideTreePrefab;
+        private Transform _cachedBrailleLineTransform;
+        private bool _hasBrailleOverride = false;
+        private bool _showBrailleOverride = false;
 
         // [핵심!] SafeLane의 Transform 스케일(60, 0.2, 1) 왜곡을 장애물이 상속받지 않도록 독립 컨테이너 사용
         private static Transform _obstacleRootContainer;
@@ -136,7 +139,16 @@ namespace CampusRun.Track
             _isSafeLane = true;
             _meshRenderer = GetComponent<MeshRenderer>();
             CacheSideTreePrefab();
+            CacheBrailleLineTransform();
             InitializeStreetLightPool();
+        }
+
+        private void CacheBrailleLineTransform()
+        {
+            if (_brailleBlockGroup != null && _brailleBlockGroup.transform.childCount > 0)
+            {
+                _cachedBrailleLineTransform = _brailleBlockGroup.transform.GetChild(0);
+            }
         }
 
         private void CacheSideTreePrefab()
@@ -184,6 +196,15 @@ namespace CampusRun.Track
 
             _obstacleRootContainer = null;
             _decorRootContainer = null;
+        }
+
+        /// <summary>
+        /// 연속된 인도 묶음(한 뭉탱이)에서 중앙 줄에만 점자블록이 1개 표시되도록 설정합니다.
+        /// </summary>
+        public void SetShowBrailleBlock(bool showBraille)
+        {
+            _hasBrailleOverride = true;
+            _showBrailleOverride = showBraille;
         }
 
         private void InitializeStreetLightPool()
@@ -263,11 +284,24 @@ namespace CampusRun.Track
                 _curbDecorations.SetActive(true);
             }
 
-            // 점자블록은 가끔씩만 등장
-            bool showBraille = Random.value < _brailleBlockChance;
+            // 인도 묶음(한 뭉탱이)의 중앙 줄에만 점자블록을 정중앙(localZ = 0f)에 깔끔하게 1줄 표시
+            bool showBraille = _hasBrailleOverride ? _showBrailleOverride : (Random.value < _brailleBlockChance);
             if (_brailleBlockGroup != null)
             {
                 _brailleBlockGroup.SetActive(showBraille);
+                if (showBraille)
+                {
+                    _brailleBlockGroup.transform.localPosition = Vector3.zero;
+                    if (_cachedBrailleLineTransform == null)
+                    {
+                        CacheBrailleLineTransform();
+                    }
+                    if (_cachedBrailleLineTransform != null)
+                    {
+                        Vector3 lp = _cachedBrailleLineTransform.localPosition;
+                        _cachedBrailleLineTransform.localPosition = new Vector3(0f, lp.y, 0f);
+                    }
+                }
             }
 
             // 2. 가로등 분산 스폰 (12% 확률로 좌/우 무작위 한 쪽에만 듬성듬성 배치)
@@ -466,6 +500,8 @@ namespace CampusRun.Track
         protected override void OnLaneRecycled()
         {
             base.OnLaneRecycled();
+            _hasBrailleOverride = false;
+            _showBrailleOverride = false;
 
             if (_activeStreetLight != null)
             {
