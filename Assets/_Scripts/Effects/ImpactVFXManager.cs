@@ -6,7 +6,7 @@ using CampusRun.Core;
 namespace CampusRun.Effects
 {
     /// <summary>
-    /// 차량 충돌 파편, 물웅덩이 풍덩 물보라, 점프 착지 모래먼지 VFX를 총괄하는 매니저입니다.
+    /// 차량 충돌 파편, 물웅덩이 풍덩 물보라, 통나무 디딤 미니 물보라, 점프 착지 모래먼지 VFX를 총괄하는 매니저입니다.
     /// UnityEngine.Pool.ObjectPool을 사용하여 GC 할당 없이 최적의 성능으로 파티클을 재생하며,
     /// 재시작 시 활성화된 모든 파티클을 즉시 회수 및 Clear하여 화면 잔상을 방지합니다.
     /// </summary>
@@ -37,6 +37,7 @@ namespace CampusRun.Effects
         private ObjectPool<ParticleSystem> _crashDebrisPool;
         private ObjectPool<ParticleSystem> _waterSplashPool;
         private ObjectPool<ParticleSystem> _dustPuffPool;
+        private ObjectPool<ParticleSystem> _logStepSplashPool;
 
         private Material _particleMaterial;
 
@@ -168,6 +169,16 @@ namespace CampusRun.Effects
                 collectionCheck: false,
                 defaultCapacity: 10,
                 maxSize: 25
+            );
+
+            _logStepSplashPool = new ObjectPool<ParticleSystem>(
+                createFunc: () => CreateParticleSystemInstance("LogStepSplash_VFX", SetupLogStepSplashSettings, _logStepSplashPool),
+                actionOnGet: ps => { ps.Clear(true); ps.gameObject.SetActive(true); },
+                actionOnRelease: ps => { if (ps != null) { ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear); ps.Clear(true); ps.gameObject.SetActive(false); } },
+                actionOnDestroy: ps => { if (ps != null) Destroy(ps.gameObject); },
+                collectionCheck: false,
+                defaultCapacity: 8,
+                maxSize: 20
             );
         }
 
@@ -319,6 +330,55 @@ namespace CampusRun.Effects
             renderer.sortingOrder = 10;
         }
 
+        /// <summary> 통나무 위로 올라섰을 때 밟은 부위 수면에서 '살짝 풍덩' 튀어오르는 미니 물방울/포말 이펙트 </summary>
+        private void SetupLogStepSplashSettings(ParticleSystem ps)
+        {
+            var main = ps.main;
+            main.loop = false;
+            main.playOnAwake = false;
+            main.duration = 0.32f;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(0.22f, 0.34f);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(1.8f, 3.4f);
+            main.startSize = new ParticleSystem.MinMaxCurve(0.08f, 0.16f);
+            main.startColor = new ParticleSystem.MinMaxGradient(new Color(0.62f, 0.90f, 1f, 0.95f), Color.white);
+            main.gravityModifier = 2.1f;
+            main.stopAction = ParticleSystemStopAction.Callback;
+
+            var col = ps.colorOverLifetime;
+            col.enabled = true;
+            Gradient grad = new Gradient();
+            grad.SetKeys(
+                new GradientColorKey[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(new Color(0.75f, 0.94f, 1f), 1f) },
+                new GradientAlphaKey[] { new GradientAlphaKey(0.95f, 0f), new GradientAlphaKey(0.85f, 0.55f), new GradientAlphaKey(0f, 1f) }
+            );
+            col.color = grad;
+
+            var sol = ps.sizeOverLifetime;
+            sol.enabled = true;
+            AnimationCurve curve = new AnimationCurve();
+            curve.AddKey(0f, 0.8f);
+            curve.AddKey(0.3f, 1.1f);
+            curve.AddKey(1f, 0.2f);
+            sol.size = new ParticleSystem.MinMaxCurve(1f, curve);
+
+            var emission = ps.emission;
+            emission.enabled = true;
+            emission.rateOverTime = 0;
+            emission.SetBursts(new ParticleSystem.Burst[] { new ParticleSystem.Burst(0f, 11) });
+
+            var shape = ps.shape;
+            shape.enabled = true;
+            shape.shapeType = ParticleSystemShapeType.Cone;
+            shape.angle = 42f;
+            shape.radius = 0.26f;
+            shape.rotation = new Vector3(-90f, 0f, 0f);
+
+            var renderer = ps.GetComponent<ParticleSystemRenderer>();
+            renderer.material = _particleMaterial;
+            renderer.renderMode = ParticleSystemRenderMode.Billboard;
+            renderer.sortingOrder = 12;
+        }
+
         #endregion
 
         #region --- 외부 공개 재생 API ---
@@ -354,6 +414,17 @@ namespace CampusRun.Effects
             if (Instance == null || Instance._dustPuffPool == null) return;
             ParticleSystem ps = Instance._dustPuffPool.Get();
             ps.transform.position = position + new Vector3(0f, 0.20f, -0.1f);
+            ps.Play();
+        }
+
+        /// <summary>
+        /// 통나무 위에 착지하거나 이동했을 때 밟은 지점 수면에서 살짝 풍덩 튀는 미니 물방울/포말 이펙트를 재생합니다.
+        /// </summary>
+        public static void PlayLogStepSplash(Vector3 position)
+        {
+            if (Instance == null || Instance._logStepSplashPool == null) return;
+            ParticleSystem ps = Instance._logStepSplashPool.Get();
+            ps.transform.position = new Vector3(position.x, 0.16f, position.z);
             ps.Play();
         }
 

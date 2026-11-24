@@ -10,7 +10,52 @@ namespace CampusRun.Effects
     /// </summary>
     public class CameraShake : MonoBehaviour
     {
+        public const string PrefKeyScreenShake = "CampusRun_ScreenShake";
+
         public static CameraShake Instance { get; private set; }
+
+        private static bool _isShakeEnabled = true;
+        private static bool _hasLoadedPref = false;
+
+        /// <summary>
+        /// 설정(Settings)의 '화면 흔들림' 활성화 여부입니다.
+        /// </summary>
+        public static bool IsShakeEnabled
+        {
+            get
+            {
+                if (!_hasLoadedPref)
+                {
+                    _isShakeEnabled = PlayerPrefs.GetInt(PrefKeyScreenShake, 1) == 1;
+                    _hasLoadedPref = true;
+                }
+                return _isShakeEnabled;
+            }
+        }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStaticState()
+        {
+            Instance = null;
+            _hasLoadedPref = false;
+            _isShakeEnabled = true;
+        }
+
+        /// <summary>
+        /// 화면 흔들림 설정을 즉시 반영하고 저장합니다. 비활성화 시 진행 중인 흔들림도 즉시 중단합니다.
+        /// </summary>
+        public static void SetShakeEnabled(bool enabled)
+        {
+            _isShakeEnabled = enabled;
+            _hasLoadedPref = true;
+            PlayerPrefs.SetInt(PrefKeyScreenShake, enabled ? 1 : 0);
+            PlayerPrefs.Save();
+
+            if (!enabled && Instance != null)
+            {
+                Instance.ResetShake();
+            }
+        }
 
         [Header("--- 쉐이크 기본 파라미터 ---")]
         [Tooltip("펄린 노이즈 진동 주파수 (높을수록 빠르게 덜덜 떨림)")]
@@ -33,6 +78,9 @@ namespace CampusRun.Effects
                 return;
             }
             Instance = this;
+
+            _isShakeEnabled = PlayerPrefs.GetInt(PrefKeyScreenShake, 1) == 1;
+            _hasLoadedPref = true;
 
             _seedX = Random.Range(0f, 100f);
             _seedY = Random.Range(100f, 200f);
@@ -68,6 +116,12 @@ namespace CampusRun.Effects
 
         private void Update()
         {
+            if (!IsShakeEnabled)
+            {
+                ShakeOffset = Vector3.zero;
+                return;
+            }
+
             if (_elapsedTime < _currentDuration)
             {
                 _elapsedTime += Time.unscaledDeltaTime;
@@ -97,6 +151,11 @@ namespace CampusRun.Effects
         /// <param name="duration">진동 지속 시간 (초)</param>
         public static void Shake(float intensity, float duration)
         {
+            if (!IsShakeEnabled || PlayerPrefs.GetInt(PrefKeyScreenShake, 1) == 0)
+            {
+                return;
+            }
+
             if (Instance == null)
             {
                 Camera mainCam = Camera.main;
@@ -117,6 +176,7 @@ namespace CampusRun.Effects
         /// </summary>
         public static void ShakeOnHit()
         {
+            if (!IsShakeEnabled) return;
             Shake(0.4f, 0.3f);
             DoHitStop(0.05f, 0.05f);
         }
@@ -126,6 +186,7 @@ namespace CampusRun.Effects
         /// </summary>
         public static void ShakeOnCarCrash()
         {
+            if (!IsShakeEnabled) return;
             Shake(0.45f, 0.35f);
             DoHitStop(0.06f, 0.05f); // 0.06초간 히트스탑
         }
@@ -135,6 +196,7 @@ namespace CampusRun.Effects
         /// </summary>
         public static void ShakeOnHeavyCrash()
         {
+            if (!IsShakeEnabled) return;
             Shake(0.65f, 0.45f);
             DoHitStop(0.08f, 0.02f);
         }
@@ -144,6 +206,7 @@ namespace CampusRun.Effects
         /// </summary>
         public static void ShakeOnWaterSplash()
         {
+            if (!IsShakeEnabled) return;
             Shake(0.28f, 0.4f);
         }
 
@@ -152,6 +215,7 @@ namespace CampusRun.Effects
         /// </summary>
         public static void ShakeOnHopLanding()
         {
+            if (!IsShakeEnabled) return;
             Shake(0.04f, 0.08f);
         }
 
@@ -160,6 +224,11 @@ namespace CampusRun.Effects
         /// </summary>
         public static void DoHitStop(float duration, float timeScale = 0.05f)
         {
+            if (!IsShakeEnabled || PlayerPrefs.GetInt(PrefKeyScreenShake, 1) == 0)
+            {
+                return;
+            }
+
             if (Instance != null)
             {
                 if (Instance._hitStopRoutine != null)
@@ -181,6 +250,8 @@ namespace CampusRun.Effects
 
         private void TriggerShake(float intensity, float duration)
         {
+            if (!IsShakeEnabled) return;
+
             // 더 강한 쉐이크가 들어오거나 기존 쉐이크가 약해졌을 때 갱신
             if (intensity > _currentIntensity * (1f - (_elapsedTime / Mathf.Max(0.001f, _currentDuration))))
             {

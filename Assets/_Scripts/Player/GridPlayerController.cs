@@ -381,7 +381,7 @@ namespace CampusRun.Player
                 return false;
             }
 
-            // 기존에 탑승 중이던 널판지에서 이탈
+            // 기존에 탑승 중이던 널판지에서 이탈 (박차고 나갈 때 반동 전달)
             if (_currentMountedPlank != null)
             {
                 _currentMountedPlank.UnmountPlayer(this);
@@ -395,7 +395,7 @@ namespace CampusRun.Player
                 ? Quaternion.LookRotation(worldDirection, Vector3.up)
                 : transform.rotation;
 
-            // 목표 위치 및 높이 계산 (통나무 위는 통나무 윗면, 일반 지상은 도로/인도 블럭 상단 표면 높이로 점프)
+            // 목표 위치 및 높이 계산 (통나무 위는 통나무 기본 윗면, 일반 지상은 도로/인도 블럭 상단 표면 높이로 점프)
             Vector3 startPos = transform.position;
             float targetY = _groundSurfaceY;
             bool isTargetPlank = false;
@@ -409,7 +409,7 @@ namespace CampusRun.Player
                 FloatingPlank plank = hit.GetComponentInParent<FloatingPlank>();
                 if (plank != null)
                 {
-                    targetY = plank.TopSurfaceY;
+                    targetY = plank.RestingTopSurfaceY;
                     isTargetPlank = true;
                     break;
                 }
@@ -438,13 +438,6 @@ namespace CampusRun.Player
             }
 
             _idleTimer = 0f; // 이동 시 활동 타이머 리셋
-
-            // 기존에 타고 있던 널판지가 있다면 탑승 해제 (새로운 칸으로 도약)
-            if (_currentMountedPlank != null)
-            {
-                _currentMountedPlank.UnmountPlayer(this);
-                _currentMountedPlank = null;
-            }
 
             if (_isWarningTriggered)
             {
@@ -599,8 +592,15 @@ namespace CampusRun.Player
 
             if (_isAlive)
             {
-                // 생존 상태로 지면에 착지했을 때 은은하고 작은 미니 도트 모래먼지 연출
-                ImpactVFXManager.PlayDustPuff(targetPos);
+                // 통나무에 착지했을 때는 밟은 부위 수면에서 '살짝 풍덩' 미니 물방울/포말을, 일반 지상에서는 미니 모래먼지를 재생
+                if (_currentMountedPlank != null)
+                {
+                    ImpactVFXManager.PlayLogStepSplash(targetPos);
+                }
+                else
+                {
+                    ImpactVFXManager.PlayDustPuff(targetPos);
+                }
 
                 // 선입력 버퍼에 대기 중인 다음 입력이 있다면 지체 없이 즉시 다음 점프 개시
                 if (!ConsumeBufferedInputIfReady())
@@ -678,17 +678,18 @@ namespace CampusRun.Player
                 }
             }
 
-            // 1. 널판지 위에 착지 성공 -> 탑승 및 표류 동기화 (몸이 끼지 않고 통나무 윗면에 정확히 발을 딛음)
+            // 1. 널판지 위에 착지 성공 -> 탑승 및 착지 위치(양 끝/중간) 기반 '살짝 풍덩' 흔들림 발동
             if (foundPlank != null)
             {
                 _currentMountedPlank = foundPlank;
-                _currentMountedPlank.MountPlayer(this);
+                _currentMountedPlank.MountPlayer(this, landedPos.x);
                 if (!_playedWoodSoundThisHop)
                 {
                     AudioManager.Instance.PlayWoodPlankSound();
                 }
                 _playedWoodSoundThisHop = false;
-                transform.position = new Vector3(transform.position.x, foundPlank.TopSurfaceY, transform.position.z);
+                transform.position = new Vector3(transform.position.x, foundPlank.GetSurfaceYAtWorldX(transform.position.x), transform.position.z);
+                GameEvents.TriggerPlayerSteppedPlank();
                 return;
             }
 
@@ -759,7 +760,7 @@ namespace CampusRun.Player
 
         public void ApplyPlankDrift(float deltaX)
         {
-            float targetY = (_currentMountedPlank != null) ? _currentMountedPlank.TopSurfaceY : transform.position.y;
+            float targetY = (_currentMountedPlank != null) ? _currentMountedPlank.GetSurfaceYAtWorldX(transform.position.x) : transform.position.y;
             ApplyPlankDrift(deltaX, targetY);
         }
 

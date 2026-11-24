@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
@@ -123,10 +123,6 @@ namespace CampusRun.UI
         private Button _screenShakeToggleButton;
         private Text _screenShakeToggleText;
         private Image _screenShakeToggleBg;
-        private Button _displayModeToggleButton;
-        private Text _displayModeToggleText;
-        private Text _resetFeedbackText;
-        private Coroutine _resetFeedbackRoutine;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void AutoInitializeInScene()
@@ -1156,7 +1152,7 @@ namespace CampusRun.UI
         }
 
         /// <summary>
-        /// 씬에 LeaderboardUI 컴포넌트가 없으면 안전하게 자동 생성합니다.
+        /// 씬에 LeaderboardUI 및 AchievementManager 컴포넌트가 없으면 안전하게 자동 생성합니다.
         /// </summary>
         private void EnsureLeaderboardUI()
         {
@@ -1165,6 +1161,8 @@ namespace CampusRun.UI
                 GameObject lbObj = new GameObject("[LeaderboardUI]");
                 lbObj.AddComponent<LeaderboardUI>();
             }
+
+            CampusRun.Achievements.AchievementManager.EnsureInitialized();
         }
 
         /// <summary>
@@ -1292,7 +1290,7 @@ namespace CampusRun.UI
                 Image dimImg = _settingsPanel.AddComponent<Image>();
                 dimImg.color = new Color(0f, 0f, 0f, 0.78f);
 
-                // 중앙 다이얼로그 박스
+                // 중앙 다이얼로그 박스 (화면 모드 및 기록 초기화 행 제거에 맞춰 높이 최적화)
                 GameObject boxObj = new GameObject("Dialog_Box");
                 boxObj.transform.SetParent(_settingsPanel.transform, false);
 
@@ -1300,7 +1298,7 @@ namespace CampusRun.UI
                 boxRect.anchorMin = new Vector2(0.5f, 0.5f);
                 boxRect.anchorMax = new Vector2(0.5f, 0.5f);
                 boxRect.pivot = new Vector2(0.5f, 0.5f);
-                boxRect.sizeDelta = new Vector2(580f, 620f);
+                boxRect.sizeDelta = new Vector2(580f, 470f);
                 boxObj.transform.localScale = new Vector3(0.9f, 0.9f, 0.9f);
 
                 Image boxImg = boxObj.AddComponent<Image>();
@@ -1310,7 +1308,7 @@ namespace CampusRun.UI
                 GameObject titleObj = new GameObject("Title_Text");
                 titleObj.transform.SetParent(boxObj.transform, false);
                 RectTransform titleRect = titleObj.AddComponent<RectTransform>();
-                titleRect.anchoredPosition = new Vector2(0f, 255f);
+                titleRect.anchoredPosition = new Vector2(0f, 180f);
                 titleRect.sizeDelta = new Vector2(400f, 50f);
 
                 Text titleText = titleObj.AddComponent<Text>();
@@ -1325,7 +1323,7 @@ namespace CampusRun.UI
                 GameObject closeBtnObj = new GameObject("Close_X_Button");
                 closeBtnObj.transform.SetParent(boxObj.transform, false);
                 RectTransform closeRect = closeBtnObj.AddComponent<RectTransform>();
-                closeRect.anchoredPosition = new Vector2(245f, 255f);
+                closeRect.anchoredPosition = new Vector2(245f, 180f);
                 closeRect.sizeDelta = new Vector2(42f, 42f);
 
                 Image closeImg = closeBtnObj.AddComponent<Image>();
@@ -1345,97 +1343,37 @@ namespace CampusRun.UI
                 closeText.alignment = TextAnchor.MiddleCenter;
                 closeText.text = "X";
 
-                // 1) 전체 음량 슬라이더 (Y = 175)
-                CreateSliderRow("전체 음량", boxObj.transform, 175f, defaultFont,
+                // 1) 전체 음량 슬라이더 (Y = 105)
+                CreateSliderRow("전체 음량", boxObj.transform, 105f, defaultFont,
                     PlayerPrefs.GetFloat(PrefKeyMasterVolume, 1.0f),
                     OnMasterVolumeChanged,
                     out _masterVolumeSlider, out _masterVolumeValueText);
 
-                // 2) 배경 음악 슬라이더 (Y = 105)
-                CreateSliderRow("배경 음악", boxObj.transform, 105f, defaultFont,
+                // 2) 배경 음악 슬라이더 (Y = 35)
+                CreateSliderRow("배경 음악", boxObj.transform, 35f, defaultFont,
                     PlayerPrefs.GetFloat(PrefKeyBGMVolume, 0.8f),
                     OnBGMVolumeChanged,
                     out _bgmVolumeSlider, out _bgmVolumeValueText);
 
-                // 3) 효과음 슬라이더 (Y = 35)
-                CreateSliderRow("효과음", boxObj.transform, 35f, defaultFont,
+                // 3) 효과음 슬라이더 (Y = -35)
+                CreateSliderRow("효과음", boxObj.transform, -35f, defaultFont,
                     PlayerPrefs.GetFloat(PrefKeySFXVolume, 1.0f),
                     OnSFXVolumeChanged,
                     out _sfxVolumeSlider, out _sfxVolumeValueText);
 
-                // 4) 화면 흔들림 토글 (Y = -35)
+                // 4) 화면 흔들림 토글 (Y = -105)
                 bool isShakeOn = PlayerPrefs.GetInt(PrefKeyScreenShake, 1) == 1;
-                CreateToggleRow("화면 흔들림", boxObj.transform, -35f, defaultFont,
+                CreateToggleRow("화면 흔들림", boxObj.transform, -105f, defaultFont,
                     isShakeOn ? "ON (켬)" : "OFF (끔)",
                     isShakeOn ? new Color(0.18f, 0.78f, 0.38f) : new Color(0.4f, 0.45f, 0.5f),
                     OnScreenShakeToggled,
                     out _screenShakeToggleButton, out _screenShakeToggleText, out _screenShakeToggleBg);
 
-                // 5) 화면 모드 토글 (Y = -105)
-                bool isFullscreen = Screen.fullScreen;
-                CreateToggleRow("화면 모드", boxObj.transform, -105f, defaultFont,
-                    isFullscreen ? "[ 전체화면 ]" : "[ 창모드 ]",
-                    new Color(0.24f, 0.55f, 0.9f),
-                    OnDisplayModeToggled,
-                    out _displayModeToggleButton, out _displayModeToggleText, out _);
-
-                // 6) 최고 기록 초기화 (Y = -175)
-                GameObject resetRowObj = new GameObject("Reset_Row");
-                resetRowObj.transform.SetParent(boxObj.transform, false);
-
-                GameObject resetLabelObj = new GameObject("Label");
-                resetLabelObj.transform.SetParent(resetRowObj.transform, false);
-                RectTransform resetLabelRect = resetLabelObj.AddComponent<RectTransform>();
-                resetLabelRect.anchoredPosition = new Vector2(-150f, -175f);
-                resetLabelRect.sizeDelta = new Vector2(160f, 40f);
-                Text resetLabelText = resetLabelObj.AddComponent<Text>();
-                resetLabelText.font = defaultFont;
-                resetLabelText.fontSize = 22;
-                resetLabelText.color = Color.white;
-                resetLabelText.alignment = TextAnchor.MiddleLeft;
-                resetLabelText.text = "최고 기록";
-
-                GameObject resetBtnObj = new GameObject("Reset_Button");
-                resetBtnObj.transform.SetParent(resetRowObj.transform, false);
-                RectTransform resetBtnRect = resetBtnObj.AddComponent<RectTransform>();
-                resetBtnRect.anchoredPosition = new Vector2(95f, -175f);
-                resetBtnRect.sizeDelta = new Vector2(180f, 42f);
-                Image resetBtnImg = resetBtnObj.AddComponent<Image>();
-                resetBtnImg.color = new Color(0.85f, 0.45f, 0.15f);
-                Button resetBtn = resetBtnObj.AddComponent<Button>();
-                resetBtn.onClick.AddListener(OnResetHighScoreClicked);
-
-                GameObject resetBtnTextObj = new GameObject("Text");
-                resetBtnTextObj.transform.SetParent(resetBtnObj.transform, false);
-                RectTransform resetBtnTextRect = resetBtnTextObj.AddComponent<RectTransform>();
-                resetBtnTextRect.sizeDelta = resetBtnRect.sizeDelta;
-                Text resetBtnText = resetBtnTextObj.AddComponent<Text>();
-                resetBtnText.font = defaultFont;
-                resetBtnText.fontSize = 20;
-                resetBtnText.fontStyle = FontStyle.Bold;
-                resetBtnText.color = Color.white;
-                resetBtnText.alignment = TextAnchor.MiddleCenter;
-                resetBtnText.text = "기록 초기화";
-
-                // 초기화 완료 피드백 텍스트 (Y = -215)
-                GameObject feedbackObj = new GameObject("Reset_Feedback_Text");
-                feedbackObj.transform.SetParent(boxObj.transform, false);
-                RectTransform fbRect = feedbackObj.AddComponent<RectTransform>();
-                fbRect.anchoredPosition = new Vector2(0f, -215f);
-                fbRect.sizeDelta = new Vector2(400f, 30f);
-                _resetFeedbackText = feedbackObj.AddComponent<Text>();
-                _resetFeedbackText.font = defaultFont;
-                _resetFeedbackText.fontSize = 18;
-                _resetFeedbackText.color = new Color(0.3f, 0.95f, 0.5f);
-                _resetFeedbackText.alignment = TextAnchor.MiddleCenter;
-                _resetFeedbackText.text = "최고 기록이 0m로 초기화되었습니다!";
-                _resetFeedbackText.gameObject.SetActive(false);
-
-                // 7) 하단 확인/닫기 버튼 (Y = -260)
+                // 5) 하단 확인/닫기 버튼 (Y = -180)
                 GameObject bottomCloseObj = new GameObject("Bottom_Close_Button");
                 bottomCloseObj.transform.SetParent(boxObj.transform, false);
                 RectTransform bcRect = bottomCloseObj.AddComponent<RectTransform>();
-                bcRect.anchoredPosition = new Vector2(0f, -260f);
+                bcRect.anchoredPosition = new Vector2(0f, -180f);
                 bcRect.sizeDelta = new Vector2(260f, 52f);
 
                 Image bcImg = bottomCloseObj.AddComponent<Image>();
@@ -1656,6 +1594,18 @@ namespace CampusRun.UI
             float sfxVol = PlayerPrefs.GetFloat(PrefKeySFXVolume, 1.0f);
             if (_sfxVolumeSlider != null) _sfxVolumeSlider.value = sfxVol;
             if (_sfxVolumeValueText != null) _sfxVolumeValueText.text = $"{Mathf.RoundToInt(sfxVol * 100f)}%";
+
+            bool isShakeOn = PlayerPrefs.GetInt(PrefKeyScreenShake, 1) == 1;
+            CampusRun.Effects.CameraShake.SetShakeEnabled(isShakeOn);
+
+            if (_screenShakeToggleText != null)
+            {
+                _screenShakeToggleText.text = isShakeOn ? "ON (켬)" : "OFF (끔)";
+            }
+            if (_screenShakeToggleBg != null)
+            {
+                _screenShakeToggleBg.color = isShakeOn ? new Color(0.18f, 0.78f, 0.38f) : new Color(0.4f, 0.45f, 0.5f);
+            }
         }
 
         private void OnMasterVolumeChanged(float val)
@@ -1678,52 +1628,19 @@ namespace CampusRun.UI
         {
             int current = PlayerPrefs.GetInt(PrefKeyScreenShake, 1);
             int next = (current == 1) ? 0 : 1;
+            bool isShakeOn = (next == 1);
+
             PlayerPrefs.SetInt(PrefKeyScreenShake, next);
+            CampusRun.Effects.CameraShake.SetShakeEnabled(isShakeOn);
 
             if (_screenShakeToggleText != null)
             {
-                _screenShakeToggleText.text = (next == 1) ? "ON (켬)" : "OFF (끔)";
+                _screenShakeToggleText.text = isShakeOn ? "ON (켬)" : "OFF (끔)";
             }
             if (_screenShakeToggleBg != null)
             {
-                _screenShakeToggleBg.color = (next == 1) ? new Color(0.18f, 0.78f, 0.38f) : new Color(0.4f, 0.45f, 0.5f);
+                _screenShakeToggleBg.color = isShakeOn ? new Color(0.18f, 0.78f, 0.38f) : new Color(0.4f, 0.45f, 0.5f);
             }
-        }
-
-        private void OnDisplayModeToggled()
-        {
-            bool nextFullscreen = !Screen.fullScreen;
-            Screen.fullScreen = nextFullscreen;
-
-            if (_displayModeToggleText != null)
-            {
-                _displayModeToggleText.text = nextFullscreen ? "[ 전체화면 ]" : "[ 창모드 ]";
-            }
-        }
-
-        private void OnResetHighScoreClicked()
-        {
-            PlayerPrefs.DeleteKey(HighScoreKey);
-            PlayerPrefs.Save();
-
-            if (_highScoreText != null)
-            {
-                _highScoreText.text = "최고 기록: 0m";
-            }
-
-            if (_resetFeedbackText != null)
-            {
-                if (_resetFeedbackRoutine != null) StopCoroutine(_resetFeedbackRoutine);
-                _resetFeedbackRoutine = StartCoroutine(ResetFeedbackRoutine());
-            }
-        }
-
-        private System.Collections.IEnumerator ResetFeedbackRoutine()
-        {
-            _resetFeedbackText.gameObject.SetActive(true);
-            yield return new WaitForSecondsRealtime(2.5f);
-            _resetFeedbackText.gameObject.SetActive(false);
-            _resetFeedbackRoutine = null;
         }
 
         #endregion
