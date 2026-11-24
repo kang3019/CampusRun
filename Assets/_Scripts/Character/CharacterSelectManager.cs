@@ -1,3 +1,4 @@
+// Updated with 6 characters (added skeleton)
 using System;
 using UnityEngine;
 using CampusRun.Player;
@@ -62,7 +63,7 @@ namespace CampusRun.Character
         }
 
         /// <summary>
-        /// 5종 캐릭터 프리셋(민우, 수아, 준호, 지민, 펭귄) 데이터를 초기화합니다.
+        /// 6종 캐릭터 프리셋(민우, 수아, 준호, 지민, 펭귄, 스켈레톤) 데이터를 초기화합니다.
         /// </summary>
         private void InitializeCharacterPresets()
         {
@@ -84,6 +85,12 @@ namespace CampusRun.Character
             if (penguinThumb == null)
             {
                 penguinThumb = GeneratePenguinPixelThumbnail();
+            }
+
+            Texture2D skeletonThumb = LoadPreview("skeleton");
+            if (skeletonThumb == null)
+            {
+                skeletonThumb = GenerateSkeletonPixelThumbnail();
             }
 
             _characters = new CharacterInfo[]
@@ -126,7 +133,15 @@ namespace CampusRun.Character
                     modelPrefab: LoadModel("penguin6"),
                     previewTexture: penguinThumb,
                     overrideMaterial: false,
-                    customScale: 0.95f
+                    customScale: 0.70f // 펭귄 크기 축소 (기존 0.95f -> 0.70f)
+                ),
+                new CharacterInfo(
+                    id: "char_skeleton",
+                    displayName: "해골 선배",
+                    modelPrefab: LoadModel("skeleton"),
+                    previewTexture: skeletonThumb,
+                    overrideMaterial: false,
+                    customScale: 0.65f // 신규 스켈레톤 최적 비율
                 )
             };
         }
@@ -142,6 +157,14 @@ namespace CampusRun.Character
             if (go == null)
             {
                 go = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>($"Assets/Characters/{fileName}.fbx");
+            }
+            if (go == null && (fileName == "skeleton" || fileName == "Free+Pack+-+Cartoon+Skeleton+(Rigged)"))
+            {
+                go = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Characters/Free+Pack+-+Cartoon+Skeleton+(Rigged).fbx");
+                if (go == null)
+                {
+                    go = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Resources/Characters/skeleton.fbx");
+                }
             }
 #endif
             return go;
@@ -243,6 +266,73 @@ namespace CampusRun.Character
                     pixels[y * size + x] = color;
                 }
             }
+        }
+
+        /// <summary>
+        /// 스켈레톤 전용 64x64 도트 픽셀아트 썸네일 텍스처를 런타임에 자동 생성합니다.
+        /// </summary>
+        private Texture2D GenerateSkeletonPixelThumbnail()
+        {
+            int size = 64;
+            Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            tex.filterMode = FilterMode.Point;
+
+            Color empty = new Color(0f, 0f, 0f, 0f);
+            Color boneWhite = new Color(0.92f, 0.93f, 0.95f, 1f); // 뼈 흰색
+            Color boneShadow = new Color(0.72f, 0.74f, 0.78f, 1f); // 뼈 음영
+            Color darkHole = new Color(0.12f, 0.14f, 0.18f, 1f);  // 눈/코 구멍
+            Color eyePupil = new Color(0.98f, 0.25f, 0.25f, 1f);  // 붉은 안광 포인트
+
+            Color[] pixels = new Color[size * size];
+            for (int i = 0; i < pixels.Length; i++) pixels[i] = empty;
+
+            // 1. 두개골 둥근 외형 (중심: 31.5, 38, 반경: 가로 18, 세로 17)
+            for (int y = 20; y <= 56; y++)
+            {
+                for (int x = 14; x <= 49; x++)
+                {
+                    float dx = (x - 31.5f) / 17.5f;
+                    float dy = (y - 38f) / 17f;
+                    if (dx * dx + dy * dy <= 1.0f)
+                    {
+                        pixels[y * size + x] = boneWhite;
+                    }
+                }
+            }
+
+            // 2. 턱뼈 (y: 11~22, x: 22~41)
+            for (int y = 11; y <= 22; y++)
+            {
+                for (int x = 22; x <= 41; x++)
+                {
+                    pixels[y * size + x] = boneWhite;
+                }
+            }
+
+            // 턱뼈 하단 음영
+            DrawPixelBox(pixels, size, 22, 11, 20, 2, boneShadow);
+
+            // 3. 큼직한 눈구멍 (좌: 20~28, y: 31~41 / 우: 34~42, y: 31~41)
+            DrawPixelBox(pixels, size, 20, 31, 9, 11, darkHole);
+            DrawPixelBox(pixels, size, 34, 31, 9, 11, darkHole);
+
+            // 앙증맞은 붉은 안광 도트 (좌: 24, 36 / 우: 38, 36)
+            DrawPixelBox(pixels, size, 24, 36, 2, 2, eyePupil);
+            DrawPixelBox(pixels, size, 38, 36, 2, 2, eyePupil);
+
+            // 4. 삼각형 코 구멍 (x: 30~33, y: 26~29)
+            DrawPixelBox(pixels, size, 30, 26, 4, 3, darkHole);
+            DrawPixelBox(pixels, size, 31, 28, 2, 2, darkHole);
+
+            // 5. 치아 표현 (y: 14~19, x: 25~38)
+            DrawPixelBox(pixels, size, 28, 14, 1, 6, darkHole);
+            DrawPixelBox(pixels, size, 31, 14, 2, 6, darkHole);
+            DrawPixelBox(pixels, size, 35, 14, 1, 6, darkHole);
+            DrawPixelBox(pixels, size, 25, 17, 14, 1, darkHole);
+
+            tex.SetPixels(pixels);
+            tex.Apply();
+            return tex;
         }
 
         private void LoadSavedCharacter()
@@ -369,11 +459,24 @@ namespace CampusRun.Character
                 Material[] mats = r.sharedMaterials;
                 for (int m = 0; m < mats.Length; m++)
                 {
-                    if (mats[m] != null && (mats[m].shader == null || mats[m].shader.name == "Standard" || mats[m].shader.name.StartsWith("Legacy")))
+                    if (mats[m] != null)
                     {
-                        if (urpLit != null)
+                        if (mats[m].shader == null || mats[m].shader.name == "Standard" || mats[m].shader.name.StartsWith("Legacy") || mats[m].shader.name == "Hidden/InternalErrorShader")
                         {
-                            mats[m].shader = urpLit;
+                            if (urpLit != null)
+                            {
+                                mats[m].shader = urpLit;
+                            }
+                        }
+
+                        // 스켈레톤 등 단색 뼈 모델의 경우 깔끔한 아이보리 화이트 뼈 색상 보장
+                        if (mats[m].mainTexture == null && mats[m].HasProperty("_BaseColor"))
+                        {
+                            Color current = mats[m].GetColor("_BaseColor");
+                            if (current.r < 0.2f && current.g < 0.2f && current.b < 0.2f)
+                            {
+                                mats[m].SetColor("_BaseColor", new Color(0.92f, 0.92f, 0.88f, 1f));
+                            }
                         }
                     }
                 }
