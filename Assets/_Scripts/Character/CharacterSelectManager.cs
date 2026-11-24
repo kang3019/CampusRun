@@ -456,31 +456,90 @@ namespace CampusRun.Character
                 var r = renderers[i];
                 if (r == null || r.sharedMaterials == null) continue;
 
-                Material[] mats = r.sharedMaterials;
-                for (int m = 0; m < mats.Length; m++)
-                {
-                    if (mats[m] != null)
-                    {
-                        if (mats[m].shader == null || mats[m].shader.name == "Standard" || mats[m].shader.name.StartsWith("Legacy") || mats[m].shader.name == "Hidden/InternalErrorShader")
-                        {
-                            if (urpLit != null)
-                            {
-                                mats[m].shader = urpLit;
-                            }
-                        }
+                Material[] origMats = r.sharedMaterials;
+                Material[] newMats = new Material[origMats.Length];
 
-                        // 스켈레톤 등 단색 뼈 모델의 경우 깔끔한 아이보리 화이트 뼈 색상 보장
-                        if (mats[m].mainTexture == null && mats[m].HasProperty("_BaseColor"))
-                        {
-                            Color current = mats[m].GetColor("_BaseColor");
-                            if (current.r < 0.2f && current.g < 0.2f && current.b < 0.2f)
-                            {
-                                mats[m].SetColor("_BaseColor", new Color(0.92f, 0.92f, 0.88f, 1f));
-                            }
-                        }
+                for (int m = 0; m < origMats.Length; m++)
+                {
+                    Material origMat = origMats[m];
+                    if (origMat == null)
+                    {
+                        newMats[m] = new Material(urpLit != null ? urpLit : Shader.Find("Diffuse"));
+                        continue;
                     }
+
+                    // 런타임 인스턴스 머티리얼 복제 (원본 FBX 에셋 오염 방지)
+                    Material mat = new Material(origMat);
+                    string matName = origMat.name.ToLower();
+
+                    // 1. 기존 텍스처 추출
+                    Texture mainTex = mat.mainTexture;
+                    if (mainTex == null && mat.HasProperty("_MainTex")) mainTex = mat.GetTexture("_MainTex");
+                    if (mainTex == null && mat.HasProperty("_BaseMap")) mainTex = mat.GetTexture("_BaseMap");
+
+                    // 스켈레톤의 경우 Texture_BaseColor_v02.png 검색 및 연결
+                    if (mainTex == null && (matName.Contains("skeleton") || target.name.ToLower().Contains("skeleton")))
+                    {
+                        mainTex = Resources.Load<Texture2D>("Characters/Texture_BaseColor_v02");
+#if UNITY_EDITOR
+                        if (mainTex == null)
+                        {
+                            mainTex = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Characters/Texture_BaseColor_v02.png");
+                        }
+#endif
+                    }
+
+                    // 2. 캐릭터별 고유 색상(디자인) 복원
+                    Color baseColor = Color.white;
+                    if (mat.HasProperty("_Color")) baseColor = mat.GetColor("_Color");
+                    else if (mat.HasProperty("_BaseColor")) baseColor = mat.GetColor("_BaseColor");
+
+                    // [펭귄 전용 3색 멀티 머티리얼 복원]
+                    // siyah: 펭귄의 검은 깃털/날개/머리
+                    if (matName.Contains("siyah") || matName.Contains("black"))
+                    {
+                        baseColor = new Color(0.12f, 0.15f, 0.22f, 1f);
+                    }
+                    // beyaz: 펭귄의 흰 배/눈
+                    else if (matName.Contains("beyaz") || matName.Contains("white"))
+                    {
+                        baseColor = new Color(0.96f, 0.97f, 0.99f, 1f);
+                    }
+                    // turuncu: 펭귄의 주황 부리/발
+                    else if (matName.Contains("turuncu") || matName.Contains("orange"))
+                    {
+                        baseColor = new Color(1.0f, 0.58f, 0.04f, 1f);
+                    }
+                    // [해골 전용 카툰 뼈 컬러]
+                    else if (matName.Contains("skeleton") || target.name.ToLower().Contains("skeleton"))
+                    {
+                        baseColor = new Color(0.93f, 0.91f, 0.85f, 1f); // 아이보리 뼈 색상
+                    }
+
+                    // 3. URP Lit 셰이더 적용
+                    if (urpLit != null)
+                    {
+                        mat.shader = urpLit;
+                    }
+
+                    // 4. 프로퍼티 재바인딩
+                    if (mainTex != null && mat.HasProperty("_BaseMap"))
+                    {
+                        mat.SetTexture("_BaseMap", mainTex);
+                    }
+                    if (mat.HasProperty("_BaseColor"))
+                    {
+                        mat.SetColor("_BaseColor", baseColor);
+                    }
+                    if (mat.HasProperty("_Smoothness"))
+                    {
+                        mat.SetFloat("_Smoothness", 0.10f); // 번들거림 없는 깔끔한 무광 카툰 질감
+                    }
+
+                    newMats[m] = mat;
                 }
-                r.sharedMaterials = mats;
+
+                r.materials = newMats;
             }
         }
 
