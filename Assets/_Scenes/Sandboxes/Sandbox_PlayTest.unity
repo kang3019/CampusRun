@@ -1,4 +1,4 @@
-﻿%YAML 1.1
+%YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
 --- !u!29 &1
 OcclusionCullingSettings:
@@ -297,7 +297,7 @@ MonoBehaviour:
     m_FontStyle: 1
     m_BestFit: 0
     m_MinSize: 10
-    m_MaxSize: 40
+    m_MaxSize: 76
     m_Alignment: 2
     m_AlignByGeometry: 0
     m_RichText: 1
@@ -932,11 +932,23 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CampusRun.UI.InGameUIManager
   _scoreText: {fileID: 79237783}
+  _warningBannerText: {fileID: 0}
   _gameOverPanel: {fileID: 276143409}
   _deathReasonText: {fileID: 166966640}
+  _gradeBadgeText: {fileID: 0}
   _finalScoreText: {fileID: 1925309828}
   _highScoreText: {fileID: 824667586}
   _retryButton: {fileID: 1690390367}
+  _titleScreenPanel: {fileID: 0}
+  _titleText: {fileID: 0}
+  _startPromptText: {fileID: 0}
+  _keyGuideText: {fileID: 0}
+  _settingsButton: {fileID: 0}
+  _settingsPanel: {fileID: 0}
+  _splashScreenPanel: {fileID: 0}
+  _enableSplashScreen: 1
+  _splashDuration: 2.6
+  _pixelFont: {fileID: 0}
 --- !u!4 &1162131700
 Transform:
   m_ObjectHideFlags: 0
@@ -1015,6 +1027,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9c503c5358e2ad945a1ed77e000be5f1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CampusRun.Player.PlayerCollision
+  _deathMessageFormat: "{0}\uC5D0 \uCE58\uC600\uC2B5\uB2C8\uB2E4 !!"
   _defaultDeathReason: "\uC7A5\uC560\uBB3C\uC5D0 \uBD80\uB52A\uD614\uC2B5\uB2C8\uB2E4!"
 --- !u!114 &1454545269
 MonoBehaviour:
@@ -1034,6 +1047,11 @@ MonoBehaviour:
   _minGridX: -4
   _maxGridX: 4
   _maxBackwardAllowance: 2
+  _groundSurfaceY: 0.1
+  _inputBufferTime: 0.18
+  _enableAutoRepeat: 1
+  _repeatInitialDelay: 0.2
+  _repeatInterval: 0.14
   _visualModelTransform: {fileID: 730215700}
   _jumpStretchScale: {x: 0.85, y: 1.18, z: 0.85}
   _landSquashScale: {x: 1.15, y: 0.85, z: 1.15}
@@ -1405,7 +1423,7 @@ MonoBehaviour:
     m_FontStyle: 1
     m_BestFit: 0
     m_MinSize: 10
-    m_MaxSize: 40
+    m_MaxSize: 48
     m_Alignment: 4
     m_AlignByGeometry: 0
     m_RichText: 1
@@ -1904,7 +1922,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2097587451}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.317851, y: 0.204648, z: -0.070466, w: 0.923107}
+  m_LocalRotation: {x: 0.3022642, y: 0.19773579, z: -0.06424824, w: 0.9302737}
   m_LocalPosition: {x: -3.8, y: 6.4, z: -6.8}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0

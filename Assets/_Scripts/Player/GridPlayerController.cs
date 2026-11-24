@@ -1109,6 +1109,58 @@ namespace CampusRun.Player
             }
         }
 
+        /// <summary>
+        /// 캐릭터 선택 시 외형 비주얼 모델을 교체하고 바운스 애니메이션을 연출합니다.
+        /// </summary>
+        public void SetVisualModel(Transform newVisual, bool playPopEffect = true, float scaleMultiplier = 1.0f)
+        {
+            _visualModelTransform = newVisual;
+            if (_visualModelTransform != null)
+            {
+                float baseScale = 0.86f * scaleMultiplier;
+                _visualModelTransform.localScale = new Vector3(baseScale, baseScale, baseScale);
+                _originalModelScale = _visualModelTransform.localScale;
+                _jumpStretchScale = new Vector3(_originalModelScale.x * 0.85f, _originalModelScale.y * 1.25f, _originalModelScale.z * 0.85f);
+                _landSquashScale = new Vector3(_originalModelScale.x * 1.20f, _originalModelScale.y * 0.80f, _originalModelScale.z * 1.20f);
+
+                if (playPopEffect && gameObject.activeInHierarchy)
+                {
+                    StartCoroutine(PopModelRoutine());
+                }
+            }
+        }
+
+        private IEnumerator PopModelRoutine()
+        {
+            if (_visualModelTransform == null) yield break;
+
+            float duration = 0.22f;
+            float elapsed = 0f;
+            Vector3 startScale = Vector3.zero;
+            Vector3 peakScale = _originalModelScale * 1.25f;
+
+            while (elapsed < duration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                float t = Mathf.Clamp01(elapsed / duration);
+
+                if (t < 0.6f)
+                {
+                    float subT = t / 0.6f;
+                    _visualModelTransform.localScale = Vector3.Lerp(startScale, peakScale, subT);
+                }
+                else
+                {
+                    float subT = (t - 0.6f) / 0.4f;
+                    _visualModelTransform.localScale = Vector3.Lerp(peakScale, _originalModelScale, subT);
+                }
+
+                yield return null;
+            }
+
+            _visualModelTransform.localScale = _originalModelScale;
+        }
+
         #endregion
     }
 }

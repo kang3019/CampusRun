@@ -5,6 +5,7 @@ using UnityEngine.SceneManagement;
 using UnityEngine.EventSystems;
 using CampusRun.Core;
 using CampusRun.Leaderboard;
+using CampusRun.Character;
 
 namespace CampusRun.UI
 {
@@ -69,6 +70,10 @@ namespace CampusRun.UI
 
         [Tooltip("스플래시 화면 진행 지속 시간(초)")]
         [SerializeField] private float _splashDuration = 2.6f;
+
+        [Header("--- 홈 화면 캐릭터 선택 위젯 ---")]
+        [Tooltip("홈 화면 우측 하단에 표시될 캐릭터 선택창 UI")]
+        [SerializeField] private CharacterSelectUI _characterSelectUI;
 
         [Header("--- 폰트 설정 ---")]
         [Tooltip("레트로 도트 폰트 (미지정 시 Resources/Fonts/neodgm 자동 로드)")]
@@ -156,6 +161,13 @@ namespace CampusRun.UI
 
             EnsureEventSystem();
             EnsureLeaderboardUI();
+
+            if (CharacterSelectManager.Instance == null && FindAnyObjectByType<CharacterSelectManager>() == null)
+            {
+                GameObject charMgrObj = new GameObject("[CharacterSelectManager]");
+                charMgrObj.AddComponent<CharacterSelectManager>();
+            }
+
             EnsureHUDAndGameOverUI();
             SetupScoreHUDPosition();
             ApplyFixedScale();
@@ -200,6 +212,7 @@ namespace CampusRun.UI
                 if (_titleScreenPanel != null) _titleScreenPanel.SetActive(false);
                 if (_settingsButton != null) _settingsButton.gameObject.SetActive(false);
                 if (_scoreText != null) _scoreText.gameObject.SetActive(false);
+                if (_characterSelectUI != null) _characterSelectUI.SetVisibility(false);
 
                 if (_splashScreenPanel != null)
                 {
@@ -214,6 +227,7 @@ namespace CampusRun.UI
                 if (_titleScreenPanel != null) _titleScreenPanel.SetActive(true);
                 if (_settingsButton != null) _settingsButton.gameObject.SetActive(true);
                 if (_scoreText != null) _scoreText.gameObject.SetActive(false);
+                if (_characterSelectUI != null) _characterSelectUI.SetVisibility(true);
                 StartPromptPulse();
             }
         }
@@ -637,6 +651,26 @@ namespace CampusRun.UI
 
             // 7. 스플래시 인트로 화면
             EnsureSplashScreenUI(canvas, defaultFont);
+
+            // 8. 홈 화면 우측 하단 캐릭터 선택 위젯
+            EnsureCharacterSelectUI(canvas, defaultFont);
+        }
+
+        /// <summary>
+        /// 홈 화면 우측 하단에 4종 캐릭터(민우, 수아, 준호, 지민) 선택창 위젯을 생성합니다.
+        /// </summary>
+        private void EnsureCharacterSelectUI(Canvas canvas, Font defaultFont)
+        {
+            if (_characterSelectUI != null) return;
+
+            Transform existing = canvas.transform.Find("CharacterSelect_Widget");
+            if (existing != null)
+            {
+                _characterSelectUI = existing.GetComponent<CharacterSelectUI>();
+                return;
+            }
+
+            _characterSelectUI = CharacterSelectUI.Create(canvas, defaultFont);
         }
 
         /// <summary>
@@ -846,6 +880,11 @@ namespace CampusRun.UI
                 _settingsButton.gameObject.SetActive(false);
             }
 
+            if (_characterSelectUI != null)
+            {
+                _characterSelectUI.SetVisibility(false);
+            }
+
             if (_promptPulseRoutine != null)
             {
                 StopCoroutine(_promptPulseRoutine);
@@ -905,6 +944,11 @@ namespace CampusRun.UI
             if (_settingsButton != null)
             {
                 _settingsButton.gameObject.SetActive(true);
+            }
+
+            if (_characterSelectUI != null)
+            {
+                _characterSelectUI.SetVisibility(true);
             }
 
             if (_gameOverPanel != null) _gameOverPanel.SetActive(false);
@@ -2044,6 +2088,11 @@ namespace CampusRun.UI
             if (_settingsButton != null)
             {
                 _settingsButton.gameObject.SetActive(true);
+            }
+
+            if (_characterSelectUI != null)
+            {
+                _characterSelectUI.SetVisibility(true);
             }
 
             StartPromptPulse();
