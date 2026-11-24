@@ -588,10 +588,10 @@ namespace CampusRun.Character
                     GameObject catModel = Instantiate(catPrefab, newVisual.transform);
                     catModel.name = "Cat_Mesh_Root";
                     catModel.transform.localPosition = Vector3.zero;
-                    catModel.transform.localRotation = catPrefab.transform.localRotation;
+                    catModel.transform.localRotation = Quaternion.identity;
 
+                    // Blender FBX 고양이의 직립(-90도 변환), 크기(일반 캐릭터 0.65m와 1:1), 발바닥 착지 완벽 보정
                     SetupCatModelInWrapper(catModel);
-                    AttachCatFace(catModel);
 
                     targetForMaterials = newVisual;
                 }
@@ -826,47 +826,64 @@ namespace CampusRun.Character
         }
 
         /// <summary>
-        /// Blender에서 임포트된 고양이 모델의 회전(누워있음 방지), 스케일(2cm 축소 방지 -> 0.78m 로컬 높이 -> 0.67m 인게임 높이), 바닥 착지를 완벽 자동 보정합니다.
+        /// Blender에서 임포트된 고양이 모델의 회전(누워있음/얼굴 바닥 쳐박힘 방지), 스케일(2cm 축소 방지 -> 일반 캐릭터 0.65m 일치), 지면 완벽 착지를 보정합니다.
         /// </summary>
         private void SetupCatModelInWrapper(GameObject catModel)
         {
             if (catModel == null) return;
 
-            Renderer[] rends = catModel.GetComponentsInChildren<Renderer>(true);
-            if (rends == null || rends.Length == 0) return;
+            // 1. 회전 보정: Blender FBX 좌표계(Z-up, -Y-face)를 Unity 직립 좌표계(+Y-up, +Z-face)로 완벽 변환
+            // X축 -90도 회전을 적용하면:
+            // - 원래 발바닥(Z=0) -> 지면(Y=0)
+            // - 원래 귀(Z=+1.32) -> 위쪽(+Y)
+            // - 원래 얼굴(Y=-0.79) -> 정면(+Z)
+            // - 원래 꼬리(Y=+1.25) -> 후방(-Z)
+            catModel.transform.localRotation = Quaternion.Euler(-90f, 0f, 0f);
 
-            // 1. 현재 바운드 계산
-            Bounds b = rends[0].bounds;
-            for (int i = 1; i < rends.Length; i++) b.Encapsulate(rends[i].bounds);
-
-            // 모델이 앞으로 엎어져 누워있는 경우 (Z 길이가 Y 높이보다 긴 경우) 직립 회전 보정
-            if (b.size.z > b.size.y * 1.15f)
+            // 2. 크기 및 지면 착지 정밀 계산 (MeshFilter 로컬 바운드 기반 100% 무오차 정렬)
+            MeshFilter mf = catModel.GetComponentInChildren<MeshFilter>();
+            if (mf != null && mf.sharedMesh != null)
             {
-                catModel.transform.localRotation *= Quaternion.Euler(90f, 0f, 0f);
-                b = rends[0].bounds;
-                for (int i = 1; i < rends.Length; i++) b.Encapsulate(rends[i].bounds);
-                if (b.size.z > b.size.y * 1.15f)
+                Bounds mb = mf.sharedMesh.bounds;
+                // Blender 원본의 Z축 크기가 곧 직립 후의 Y축 높이가 됨
+                float rawMeshHeight = mb.size.z;
+                if (rawMeshHeight < 0.0001f) rawMeshHeight = mb.size.y;
+
+                // 목표 인게임 높이: 0.65m (일반 인간 캐릭터와 1:1 완벽 일치)
+                // 부모 VisualModel에 GridPlayerController의 baseScale(0.86)이 적용되므로,
+                // 로컬 목표 높이는 0.65f / 0.86f = 약 0.756m
+                float targetLocalHeight = 0.756f;
+                float scale = targetLocalHeight / rawMeshHeight;
+                catModel.transform.localScale = new Vector3(scale, scale, scale);
+
+                // 발바닥 지면 완벽 밀착: 직립(-90도) 후 바닥 Y는 mb.min.z * scale 이므로,
+                // 로컬 Y 위치를 -mb.min.z * scale 로 이동시키면 최하단 발바닥이 정확히 Y=0(지면)에 안착됨
+                float groundYOffset = -mb.min.z * scale;
+                catModel.transform.localPosition = new Vector3(0f, groundYOffset, 0f);
+            }
+            else
+            {
+                // MeshFilter가 없는 경우 렌더러 바운드로 폴백
+                Renderer[] rends = catModel.GetComponentsInChildren<Renderer>(true);
+                if (rends != null && rends.Length > 0)
                 {
-                    catModel.transform.localRotation *= Quaternion.Euler(-180f, 0f, 0f);
+                    Bounds b = rends[0].bounds;
+                    for (int i = 1; i < rends.Length; i++) b.Encapsulate(rends[i].bounds);
+
+                    float currentHeight = b.size.y;
+                    float targetLocalHeight = 0.756f;
+                    if (currentHeight > 0.0001f)
+                    {
+                        float multiplier = targetLocalHeight / currentHeight;
+                        catModel.transform.localScale = Vector3.Scale(catModel.transform.localScale, new Vector3(multiplier, multiplier, multiplier));
+                    }
+
                     b = rends[0].bounds;
                     for (int i = 1; i < rends.Length; i++) b.Encapsulate(rends[i].bounds);
+                    float bottomOffset = catModel.transform.parent.position.y - b.min.y;
+                    catModel.transform.position += Vector3.up * bottomOffset;
                 }
             }
-
-            // 2. 목표 높이: 부모의 baseScale(0.86) 적용 후 최종 인게임 높이가 0.67m(Kenney 캐릭터)가 되도록 로컬 높이를 0.78m로 설정
-            float currentHeight = b.size.y;
-            float targetLocalHeight = 0.78f;
-            if (currentHeight > 0.0001f)
-            {
-                float multiplier = targetLocalHeight / currentHeight;
-                catModel.transform.localScale = Vector3.Scale(catModel.transform.localScale, new Vector3(multiplier, multiplier, multiplier));
-            }
-
-            // 3. 지면(발바닥) 착지 보정: 모델 최하단(min.y)이 부모 피벗의 Y=0(지면)에 일치하도록 이동
-            b = rends[0].bounds;
-            for (int i = 1; i < rends.Length; i++) b.Encapsulate(rends[i].bounds);
-            float bottomOffset = catModel.transform.parent.position.y - b.min.y;
-            catModel.transform.position += Vector3.up * bottomOffset;
         }
 
         /// <summary>
